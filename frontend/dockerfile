@@ -1,0 +1,30 @@
+# ---- Build stage ----
+FROM node:20-alpine AS build
+
+WORKDIR /app
+
+
+ARG VITE_AWS_PRESIGN_S3_URL
+ENV VITE_AWS_PRESIGN_S3_URL=$VITE_AWS_PRESIGN_S3_URL
+
+
+ARG VITE_API_GATEWAY_BASE_URL
+ENV VITE_API_GATEWAY_BASE_URL=$VITE_API_GATEWAY_BASE_URL
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+# ---- Runtime stage ----
+FROM nginx:alpine
+
+# DO NOT REMOVE DEFAULT CONFIG
+# Just copy built files
+
+COPY --from=build /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules
+npm-debug.log
+
+# Build output
+dist
+build
+
+# Environment variables
+.env
+.env.local
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Git
+.git
+.gitignore
+
+# Testing and configuration
+test
+.prettierrc
+eslint.config.mjs
+README.md
+
+# OS files
+.DS_Store
