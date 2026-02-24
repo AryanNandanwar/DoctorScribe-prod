@@ -20,7 +20,8 @@ async function bootstrap() {
           frontendOrigin,
           'http://localhost',      // Nginx Gateway
           'http://localhost:5173', // Local Dev
-          'http://127.0.0.1:5173'
+          'http://127.0.0.1:5173',
+          'http://141.148.208.67/' // Production IP (replace with actual IP or domain)
         ];
 
         if (allowedOrigins.includes(origin)) {
