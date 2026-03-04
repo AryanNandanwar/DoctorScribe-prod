@@ -21,7 +21,8 @@ async function bootstrap() {
           'http://localhost',      // Nginx Gateway
           'http://localhost:5173', // Local Dev
           'http://127.0.0.1:5173',
-          'http://141.148.208.67/' // Production IP (replace with actual IP or domain)
+          'http://app.echoaide.in', // Production domain
+          'http://141.148.207.68'  // Production IP
         ];
 
         if (allowedOrigins.includes(origin)) {
