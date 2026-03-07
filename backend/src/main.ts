@@ -40,6 +40,7 @@ async function bootstrap() {
           'http://localhost',      // Nginx Gateway
           'http://localhost:5173', // Local Dev
           'http://127.0.0.1:5173',
+          'https://app.echoaide.com', // Production domain
           'http://app.echoaide.in', // Production domain
           'http://141.148.207.68'  // Production IP
         ];
