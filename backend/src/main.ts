@@ -28,7 +28,7 @@ async function bootstrap() {
   }).catch(() => {});
   // #endregion agent log
 
-  const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost';
+  const frontendOrigin = process.env.FRONTEND_ORIGIN || 'https://app.echoaide.in';
 
   app.enableCors({
       origin: (origin: string | undefined, callback:  (err: Error | null, allow?: boolean) => void) => {
@@ -40,7 +40,7 @@ async function bootstrap() {
           'http://localhost',      // Nginx Gateway
           'http://localhost:5173', // Local Dev
           'http://127.0.0.1:5173',
-          'https://app.echoaide.com', // Production domain
+          'https://app.echoaide.in', // Production domain
           'http://app.echoaide.in', // Production domain
           'http://141.148.207.68'  // Production IP
         ];
