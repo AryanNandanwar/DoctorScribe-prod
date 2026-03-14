@@ -178,13 +178,13 @@ export default function Login({ onSubmit }: Props) {
             {loading ? "Signing in..." : "Log In"}
           </Button>
 
-          <div className="flex items-center gap-3">
+          {/* <div className="flex items-center gap-3">
             <div className="h-px bg-slate-200 flex-1" />
             <div className="text-sm text-slate-400">or sign in with</div>
             <div className="h-px bg-slate-200 flex-1" />
-          </div>
+          </div> */}
 
-          <Button variant="outlined" fullWidth startIcon={
+          {/* <Button variant="outlined" fullWidth startIcon={
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M21 12.3c0-.63-.06-1.24-.18-1.82H12v3.44h4.84c-.21 1.1-.86 2.03-1.82 2.66v2.2h2.94c1.72-1.58 2.72-3.93 2.72-6.48z" fill="#4285F4" />
               <path d="M12 21c2.43 0 4.47-.8 5.96-2.16l-2.94-2.2c-.82.56-1.86.9-3.02.9-2.32 0-4.29-1.56-4.99-3.65H3.95v2.29C5.44 19.93 8.45 21 12 21z" fill="#34A853" />
@@ -193,11 +193,11 @@ export default function Login({ onSubmit }: Props) {
             </svg>
           }>
             Sign in with Google
-          </Button>
+          </Button> */}
 
-          <p className="text-center text-sm text-slate-500 mt-2">
+          {/* <p className="text-center text-sm text-slate-500 mt-2">
             Don't have an account? <a className="text-sky-600 hover:underline" href="/register">Register here</a>
-          </p>
+          </p> */}
         </Box>
       </div>
 
