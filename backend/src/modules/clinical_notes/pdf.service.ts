@@ -6,7 +6,9 @@ export class PdfService {
   async generateClinicalNotePdf(clinicalNote: any): Promise<Buffer> {
     let browser;
     try {
-      console.log('Launching Puppeteer browser...');
+      console.log('Starting PDF generation for clinical note:', clinicalNote?.id);
+      console.log('Clinical note data:', JSON.stringify(clinicalNote, null, 2));
+      
       const launchOptions: any = {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -16,8 +18,13 @@ export class PdfService {
       if (process.env.PUPPETEER_EXECUTABLE_PATH) {
         launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
         launchOptions.args.push('--disable-dev-shm-usage');
+      } else {
+        // Fallback to system Chromium
+        launchOptions.executablePath = '/usr/bin/chromium-browser';
+        launchOptions.args.push('--disable-dev-shm-usage');
       }
       
+      console.log('Launching Puppeteer with options:', launchOptions);
       browser = await puppeteer.launch(launchOptions);
       console.log('Puppeteer browser launched successfully');
       
@@ -50,10 +57,12 @@ export class PdfService {
       return pdfBuffer;
     } catch (error) {
       console.error('Error in PDF generation:', error);
-      throw error;
+      console.error('Error stack:', error.stack);
+      throw new Error(`PDF generation failed: ${error.message}`);
     } finally {
       if (browser) {
         await browser.close();
+        console.log('Browser closed');
       }
     }
   }
