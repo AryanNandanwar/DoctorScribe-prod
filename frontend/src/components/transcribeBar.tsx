@@ -34,6 +34,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [wakeLock, setWakeLock] = useState<any>(null);
 
   const navigate = useNavigate();
 
@@ -42,6 +43,30 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     const logEntry = `[${timestamp}] ${message}`;
     console.log(logEntry);
     setDebugLogs(prev => [...prev.slice(-20), logEntry]); // Keep last 20 logs
+  };
+
+  // Request wake lock to prevent screen from sleeping during recording
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        const lock = await (navigator as any).wakeLock.request('screen');
+        setWakeLock(lock);
+        addDebugLog('Wake lock acquired');
+      } else {
+        addDebugLog('Wake lock not supported on this device');
+      }
+    } catch (err) {
+      addDebugLog('Wake lock request failed: ' + err);
+    }
+  };
+
+  // Release wake lock when done
+  const releaseWakeLock = () => {
+    if (wakeLock) {
+      wakeLock.release();
+      setWakeLock(null);
+      addDebugLog('Wake lock released');
+    }
   };
 
   
@@ -137,10 +162,20 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       setIsRecording(true);
       setRecordedBlob(null);
       setSelectedFileName(null);
+      requestWakeLock(); // Prevent screen sleep during recording
     });
 
     record.on("record-end", (blob: Blob) => {
       addDebugLog('Recording ended, blob size: ' + blob.size + ', type: ' + blob.type);
+      releaseWakeLock(); // Release wake lock when recording ends
+      
+      // Check if blob is empty (iPhone PWA issue)
+      if (blob.size === 0) {
+        addDebugLog('ERROR: Audio blob is empty - this is a known iPhone PWA issue');
+        onError?.('Recording failed: No audio data captured. This can happen on iPhone PWAs. Please try recording again or use the Upload Audio option.');
+        return;
+      }
+      
       setIsRecording(false);
       setRecordedBlob(blob);
       setSelectedFileName("Recorded audio");
