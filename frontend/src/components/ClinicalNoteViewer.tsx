@@ -897,7 +897,7 @@ export default function ClinicalNoteViewer({
           {/* Main content: stretches and scrolls */}
           <main className="flex-grow mt-4">
             {/* 2 equal columns on md+ screens, single column on mobile */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 min-h-[400px] md:min-h-[600px]">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 min-h-[400px] md:min-h-[600px]">
               {/* Left column */}
               <div className="space-y-6">
                 {/* Patient Details */}
@@ -935,6 +935,56 @@ export default function ClinicalNoteViewer({
                   )}
                 </div>
 
+               {/* Findings */}
+                <div className="rounded-lg border p-3 md:p-4 bg-white">
+                  <Typography variant="subtitle2" className="text-slate-700">
+                    Findings
+                  </Typography>
+                  <Divider className="my-2" />
+                  {loading ? (
+                    <Typography variant="body2">Loading…</Typography>
+                  ) : editMode ? (
+                    renderListEditable(parsed?.findings, "findings")
+                  ) : (
+                    renderList(parsed?.findings)
+                  )}
+                </div>
+
+                {/* Diagnosis */}
+                <div className="rounded-lg border p-3 md:p-4 bg-white">
+                  <Typography variant="subtitle2" className="text-slate-700">
+                    Diagnosis
+                  </Typography>
+                  <Divider className="my-2" />
+                  {loading ? (
+                    <Typography variant="body2">Loading…</Typography>
+                  ) : editMode ? (
+                    renderListEditable(parsed?.diagnosis, "diagnosis")
+                  ) : (
+                    renderList(parsed?.diagnosis)
+                  )}
+                </div>
+
+                {/* Investigations Advised */}
+                <div className="rounded-lg border p-3 md:p-4 bg-white">
+                  <Typography variant="subtitle2" className="text-slate-700">
+                    Investigations Advised
+                  </Typography>
+                  <Divider className="my-2" />
+                  {loading ? (
+                    <Typography variant="body2">Loading…</Typography>
+                  ) : editMode ? (
+                    renderListEditable(parsed?.investigationsAdvised, "investigationsAdvised")
+                  ) : (
+                    renderList(parsed?.investigationsAdvised)
+                  )}
+                </div>
+
+
+              </div>
+
+              {/* Right column */}
+              <div className="space-y-6">
                {/* Problem Faced */}
                 <div className="rounded-lg border p-3 md:p-4 bg-white">
                   <Typography variant="subtitle2" className="text-slate-700">
@@ -953,90 +1003,6 @@ export default function ClinicalNoteViewer({
                   )}
                 </div>
 
-                {/* Findings */}
-                <div className="rounded-lg border p-3 md:p-4 bg-white">
-                  <Typography variant="subtitle2" className="text-slate-700">
-                    Findings
-                  </Typography>
-                  <Divider className="my-2" />
-                  {loading ? (
-                    <Typography variant="body2">Loading…</Typography>
-                  ) : editMode ? (
-                    renderListEditable(parsed?.findings, "findings")
-                  ) : (
-                    <>
-                      {parsed?.findings && parsed.findings.length > 0 ? (
-                        renderList(parsed?.findings)
-                      ) : (
-                        <Typography variant="body2" color="textSecondary">
-                          No findings data available - showing debug info
-                        </Typography>
-                      )}
-                      {/* Debug: Show what we actually have */}
-                      <div style={{ fontSize: '10px', color: 'red', marginTop: '10px' }}>
-                        Debug: findings = {JSON.stringify(parsed?.findings)}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Diagnosis */}
-                <div className="rounded-lg border p-3 md:p-4 bg-white">
-                  <Typography variant="subtitle2" className="text-slate-700">
-                    Diagnosis
-                  </Typography>
-                  <Divider className="my-2" />
-                  {loading ? (
-                    <Typography variant="body2">Loading…</Typography>
-                  ) : editMode ? (
-                    renderListEditable(parsed?.diagnosis, "diagnosis")
-                  ) : (
-                    <>
-                      {parsed?.diagnosis && parsed.diagnosis.length > 0 ? (
-                        renderList(parsed?.diagnosis)
-                      ) : (
-                        <Typography variant="body2" color="textSecondary">
-                          No diagnosis data available
-                        </Typography>
-                      )}
-                      <div style={{ fontSize: '10px', color: 'red', marginTop: '10px' }}>
-                        Debug: diagnosis = {JSON.stringify(parsed?.diagnosis)}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Investigations Advised */}
-                <div className="rounded-lg border p-3 md:p-4 bg-white">
-                  <Typography variant="subtitle2" className="text-slate-700">
-                    Investigations Advised
-                  </Typography>
-                  <Divider className="my-2" />
-                  {loading ? (
-                    <Typography variant="body2">Loading…</Typography>
-                  ) : editMode ? (
-                    renderListEditable(parsed?.investigationsAdvised, "investigationsAdvised")
-                  ) : (
-                    <>
-                      {parsed?.investigationsAdvised && parsed.investigationsAdvised.length > 0 ? (
-                        renderList(parsed?.investigationsAdvised)
-                      ) : (
-                        <Typography variant="body2" color="textSecondary">
-                          No investigations data available
-                        </Typography>
-                      )}
-                      <div style={{ fontSize: '10px', color: 'red', marginTop: '10px' }}>
-                        Debug: investigations = {JSON.stringify(parsed?.investigationsAdvised)}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-
-              </div>
-
-              {/* Right column */}
-              <div className="space-y-6">
                 <div className="rounded-lg border p-3 md:p-4 bg-white">
                   <div className="flex items-center justify-between">
                     <Typography variant="subtitle2" className="text-slate-700">
