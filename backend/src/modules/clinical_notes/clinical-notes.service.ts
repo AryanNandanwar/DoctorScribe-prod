@@ -42,6 +42,9 @@ export class ClinicalNotesService {
       problemsFaced: dto.problemFaced ? JSON.stringify(dto.problemFaced) : '[]',
       doctorInstructions: dto.doctorInstructions ? JSON.stringify(dto.doctorInstructions) : '[]',
       medicationPrescribed: dto.medicationPrescribed ? JSON.stringify(dto.medicationPrescribed) : '[]',
+      findings: dto.findings ? JSON.stringify(dto.findings) : '[]',
+      diagnosis: dto.diagnosis ? JSON.stringify(dto.diagnosis) : '[]',
+      investigationsAdvised: dto.investigationsAdvised ? JSON.stringify(dto.investigationsAdvised) : '[]',
       doctor: doctor,
       patient: patient,
     };
@@ -102,6 +105,15 @@ export class ClinicalNotesService {
     if (dto.medicationPrescribed !== undefined) {
       note.medicationPrescribed = JSON.stringify(dto.medicationPrescribed);
     }
+    if (dto.findings !== undefined) {
+      note.findings = JSON.stringify(dto.findings);
+    }
+    if (dto.diagnosis !== undefined) {
+      note.diagnosis = JSON.stringify(dto.diagnosis);
+    }
+    if (dto.investigationsAdvised !== undefined) {
+      note.investigationsAdvised = JSON.stringify(dto.investigationsAdvised);
+    }
 
     return await this.notesCollection.save(note);
   }
@@ -128,7 +140,7 @@ export class ClinicalNotesService {
         patient: { id: patientId },
       },
       relations: ['patient'],
-      select: ['id', 'createdAt', 'medicalHistory', 'problemsFaced'],
+      select: ['id', 'createdAt', 'medicalHistory', 'problemsFaced', 'findings', 'diagnosis'],
       order: { createdAt: 'DESC' },
     });
 
@@ -142,6 +154,8 @@ export class ClinicalNotesService {
   private generateNoteSummary(note: ClinicalNote): string {
     const medicalHistory = this.parseJsonField(note.medicalHistory);
     const problemsFaced = this.parseJsonField(note.problemsFaced);
+    const findings = this.parseJsonField(note.findings);
+    const diagnosis = this.parseJsonField(note.diagnosis);
     
     let summary = '';
     if (medicalHistory && medicalHistory.length > 0) {
@@ -150,6 +164,14 @@ export class ClinicalNotesService {
     if (problemsFaced && problemsFaced.length > 0) {
       if (summary) summary += ' | ';
       summary += `Issues: ${problemsFaced.slice(0, 2).join(', ')}`;
+    }
+    if (findings && findings.length > 0) {
+      if (summary) summary += ' | ';
+      summary += `Findings: ${findings.slice(0, 2).join(', ')}`;
+    }
+    if (diagnosis && diagnosis.length > 0) {
+      if (summary) summary += ' | ';
+      summary += `Diagnosis: ${diagnosis.slice(0, 2).join(', ')}`;
     }
     
     return summary || 'Clinical visit note';

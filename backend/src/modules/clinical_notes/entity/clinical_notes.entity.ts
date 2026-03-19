@@ -27,6 +27,18 @@ export class ClinicalNote {
   @Index() // helps searches
   medicationPrescribed: string;
 
+  @Column({ type: 'text', name: 'findings', nullable: true })
+  @Index() // helps searches
+  findings: string;
+
+  @Column({ type: 'text', name: 'diagnosis', nullable: true })
+  @Index() // helps searches
+  diagnosis: string;
+
+  @Column({ type: 'text', name: 'investigations_advised', nullable: true })
+  @Index() // helps searches
+  investigationsAdvised: string;
+
   @Column({ type: 'timestamptz', default: () => 'now()', name: 'created_at' })
   createdAt: Date;
 

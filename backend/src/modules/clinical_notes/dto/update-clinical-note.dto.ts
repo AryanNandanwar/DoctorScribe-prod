@@ -37,6 +37,21 @@ export class UpdateClinicalNoteDto {
       @IsString({ each: true })
       medicationPrescribed?: string[];
 
+      @IsOptional()
+      @IsArray()
+      @IsString({ each: true })
+      findings?: string[];
+
+      @IsOptional()
+      @IsArray()
+      @IsString({ each: true })
+      diagnosis?: string[];
+
+      @IsOptional()
+      @IsArray()
+      @IsString({ each: true })
+      investigationsAdvised?: string[];
+
       patientId?: string;
 
 }

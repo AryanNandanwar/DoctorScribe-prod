@@ -46,6 +46,9 @@ type ParsedNote = {
   patientDetails?: Record<string, string>;
   medicalHistory?: string[];
   problemFaced?: string | string[];
+  findings?: string[];
+  diagnosis?: string[];
+  investigationsAdvised?: string[];
   doctorInstructions?: string[];
   medicationPrescribed?: string[];
   raw?: string;
@@ -135,8 +138,11 @@ export default function ClinicalNoteViewer({
     { key: "patientDetails", labelRegex: /patient details[:\n]/i },
     { key: "medicalHistory", labelRegex: /medical history[:\n]/i },
     { key: "problemFaced", labelRegex: /(problem faced|chief complaint|chief complaint:)[:\n]?/i },
-    { key: "doctorInstructions", labelRegex: /(doctor instructions|doctor's instructions|instructions)[:\n]/i },
-    { key: "medicationPrescribed", labelRegex: /(medication prescribed|medications prescribed|medication:)[:\n]?/i },
+    { key: "findings", labelRegex: /findings?[:\n]/i },
+    { key: "diagnosis", labelRegex: /diagnosis?[:\n]/i },
+    { key: "investigationsAdvised", labelRegex: /(investigations advised|investigations|tests advised|labs advised)[:\n]?/i },
+    { key: "doctorInstructions", labelRegex: /(doctor instructions|doctor's instructions|instructions)[:\n]?/i },
+    { key: "medicationPrescribed", labelRegex: /(medication prescribed|medications prescribed|medication)[:\n]?/i },
   ] as const;
 
   const parseClinicalNote = (raw: string): ParsedNote => {
@@ -172,6 +178,15 @@ export default function ClinicalNoteViewer({
           break;
         case "problemFaced":
           out.problemFaced = looksLikeList(content) ? parseBulletList(content) : content.split(/\n+/).map((s) => s.trim()).filter(Boolean).join("\n");
+          break;
+        case "findings":
+          out.findings = parseBulletList(content);
+          break;
+        case "diagnosis":
+          out.diagnosis = parseBulletList(content);
+          break;
+        case "investigationsAdvised":
+          out.investigationsAdvised = parseBulletList(content);
           break;
         case "doctorInstructions":
           out.doctorInstructions = parseBulletList(content);
@@ -260,8 +275,12 @@ export default function ClinicalNoteViewer({
 
       try {
         const p = parseClinicalNote(rawText);
+        console.log('Parsing successful:', p);
         setParsed(p);
-      } catch {
+      } catch (error) {
+        console.error('Parsing failed:', error);
+        console.log('Raw text length:', rawText.length);
+        console.log('Raw text preview:', rawText.substring(0, 500));
         setParsed({ raw: rawText });
       }
 
@@ -470,6 +489,9 @@ export default function ClinicalNoteViewer({
       patientDetails: parsedContent.patientDetails || {},
       medicalHistory: Array.isArray(parsedContent.medicalHistory) ? parsedContent.medicalHistory : (parsedContent.medicalHistory ? [parsedContent.medicalHistory] : []),
       problemFaced: Array.isArray(parsedContent.problemFaced) ? parsedContent.problemFaced : (parsedContent.problemFaced ? [parsedContent.problemFaced] : []),
+      findings: Array.isArray(parsedContent.findings) ? parsedContent.findings : (parsedContent.findings ? [parsedContent.findings] : []),
+      diagnosis: Array.isArray(parsedContent.diagnosis) ? parsedContent.diagnosis : (parsedContent.diagnosis ? [parsedContent.diagnosis] : []),
+      investigationsAdvised: Array.isArray(parsedContent.investigationsAdvised) ? parsedContent.investigationsAdvised : (parsedContent.investigationsAdvised ? [parsedContent.investigationsAdvised] : []),
       doctorInstructions: Array.isArray(parsedContent.doctorInstructions) ? parsedContent.doctorInstructions : (parsedContent.doctorInstructions ? [parsedContent.doctorInstructions] : []),
       medicationPrescribed: Array.isArray(parsedContent.medicationPrescribed) ? parsedContent.medicationPrescribed : (parsedContent.medicationPrescribed ? [parsedContent.medicationPrescribed] : []),
     };
@@ -928,6 +950,85 @@ export default function ClinicalNoteViewer({
                     Array.isArray(parsed?.problemFaced)
                       ? renderList(parsed?.problemFaced as string[])
                       : renderList(typeof parsed?.problemFaced === "string" ? (parsed?.problemFaced as string).split("\n").filter(Boolean) : [])
+                  )}
+                </div>
+
+                {/* Findings */}
+                <div className="rounded-lg border p-3 md:p-4 bg-white">
+                  <Typography variant="subtitle2" className="text-slate-700">
+                    Findings
+                  </Typography>
+                  <Divider className="my-2" />
+                  {loading ? (
+                    <Typography variant="body2">Loading…</Typography>
+                  ) : editMode ? (
+                    renderListEditable(parsed?.findings, "findings")
+                  ) : (
+                    <>
+                      {parsed?.findings && parsed.findings.length > 0 ? (
+                        renderList(parsed?.findings)
+                      ) : (
+                        <Typography variant="body2" color="textSecondary">
+                          No findings data available - showing debug info
+                        </Typography>
+                      )}
+                      {/* Debug: Show what we actually have */}
+                      <div style={{ fontSize: '10px', color: 'red', marginTop: '10px' }}>
+                        Debug: findings = {JSON.stringify(parsed?.findings)}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Diagnosis */}
+                <div className="rounded-lg border p-3 md:p-4 bg-white">
+                  <Typography variant="subtitle2" className="text-slate-700">
+                    Diagnosis
+                  </Typography>
+                  <Divider className="my-2" />
+                  {loading ? (
+                    <Typography variant="body2">Loading…</Typography>
+                  ) : editMode ? (
+                    renderListEditable(parsed?.diagnosis, "diagnosis")
+                  ) : (
+                    <>
+                      {parsed?.diagnosis && parsed.diagnosis.length > 0 ? (
+                        renderList(parsed?.diagnosis)
+                      ) : (
+                        <Typography variant="body2" color="textSecondary">
+                          No diagnosis data available
+                        </Typography>
+                      )}
+                      <div style={{ fontSize: '10px', color: 'red', marginTop: '10px' }}>
+                        Debug: diagnosis = {JSON.stringify(parsed?.diagnosis)}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Investigations Advised */}
+                <div className="rounded-lg border p-3 md:p-4 bg-white">
+                  <Typography variant="subtitle2" className="text-slate-700">
+                    Investigations Advised
+                  </Typography>
+                  <Divider className="my-2" />
+                  {loading ? (
+                    <Typography variant="body2">Loading…</Typography>
+                  ) : editMode ? (
+                    renderListEditable(parsed?.investigationsAdvised, "investigationsAdvised")
+                  ) : (
+                    <>
+                      {parsed?.investigationsAdvised && parsed.investigationsAdvised.length > 0 ? (
+                        renderList(parsed?.investigationsAdvised)
+                      ) : (
+                        <Typography variant="body2" color="textSecondary">
+                          No investigations data available
+                        </Typography>
+                      )}
+                      <div style={{ fontSize: '10px', color: 'red', marginTop: '10px' }}>
+                        Debug: investigations = {JSON.stringify(parsed?.investigationsAdvised)}
+                      </div>
+                    </>
                   )}
                 </div>
 
