@@ -52,5 +52,7 @@ export class CreateClinicalNoteDto {
   @IsString({ each: true })
   investigationsAdvised?: string[];
 
-  patientId: string;
+  @IsString()
+  status?: 'Draft' | 'Confirmed';
+
 }

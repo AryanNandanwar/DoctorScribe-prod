@@ -25,6 +25,7 @@ export interface SonioxSession {
   onTranscript: (transcript: string, isPartial: boolean) => void;
   isActive: boolean;
   configured: boolean;
+  transcriptBuffer: string[];
 }
 
 @Injectable()
@@ -116,7 +117,8 @@ export class SonioxClientService {
         ws,
         onTranscript,
         isActive: false,
-        configured: false
+        configured: false,
+        transcriptBuffer: []
       };
 
       this.sessions.set(sessionId, session);
@@ -238,18 +240,22 @@ export class SonioxClientService {
     }
 
     this.logger.log(`Stopping Soniox session: ${sessionId}`);
+    this.logger.debug(`Session buffer size at stop: ${session.transcriptBuffer.length}`);
 
     try {
       if (session.ws.readyState === WebSocket.OPEN) {
         // Send empty frame to gracefully close the session
         session.ws.send(Buffer.alloc(0));
         
-        // Wait a moment for final results, then close
-        setTimeout(() => {
-          if (session.ws.readyState === WebSocket.OPEN) {
-            session.ws.close(1000, 'Session stopped normally');
-          }
-        }, 1000);
+        // Wait longer for final results to be processed
+        this.logger.debug(`Waiting 3 seconds for final transcripts to be processed...`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        this.logger.debug(`Final buffer size after wait: ${session.transcriptBuffer.length}`);
+        
+        if (session.ws.readyState === WebSocket.OPEN) {
+          session.ws.close(1000, 'Session stopped normally');
+        }
       } else {
         // Force close if not in OPEN state
         session.ws.terminate();
@@ -259,8 +265,26 @@ export class SonioxClientService {
       session.ws.terminate();
     }
 
-    // Remove session from active sessions immediately
+    // Remove session from active sessions AFTER processing is complete
+    this.logger.debug(`Removing session ${sessionId} from active sessions`);
     this.sessions.delete(sessionId);
+  }
+
+  getFinalTranscript(sessionId: string): string[] {
+    const session = this.sessions.get(sessionId);
+    this.logger.debug(`Getting final transcript for session ${sessionId}. Session exists: ${!!session}`);
+    this.logger.debug(`Total active sessions: ${this.sessions.size}`);
+    this.logger.debug(`Active session IDs: [${Array.from(this.sessions.keys()).join(', ')}]`);
+    
+    if (!session) {
+      this.logger.warn(`Session ${sessionId} not found when getting final transcript`);
+      return [];
+    }
+    
+    this.logger.debug(`Session transcript buffer length: ${session.transcriptBuffer.length}`);
+    this.logger.debug(`Session transcript buffer contents: [${session.transcriptBuffer.map(b => `"${b}"`).join(', ')}]`);
+    
+    return session.transcriptBuffer;
   }
 
   async sendAudioChunk(sessionId: string, audioArrayBuffer: ArrayBuffer): Promise<void> {
@@ -402,6 +426,17 @@ export class SonioxClientService {
 
         if (transcript.trim().length > 0) {
           this.logger.debug(`Received ${isPartial ? 'partial' : 'final'} transcript for session ${sessionId}: ${transcript.substring(0, 100)}...`);
+          this.logger.debug(`Token details: ${message.tokens.map(t => `"${t.text}" (${t.is_final ? 'final' : 'partial'})`).join(', ')}`);
+          this.logger.debug(`Current buffer size before adding: ${session.transcriptBuffer.length}`);
+          
+          // Collect final transcripts in buffer
+          if (!isPartial) {
+            session.transcriptBuffer.push(transcript.trim());
+            this.logger.debug(`Added final transcript to buffer. New buffer size: ${session.transcriptBuffer.length}`);
+            this.logger.debug(`Buffer contents: [${session.transcriptBuffer.map(b => `"${b}"`).join(', ')}]`);
+          } else {
+            this.logger.debug(`Skipping partial transcript - not adding to buffer`);
+          }
           
           // Call the transcript callback
           session.onTranscript(transcript.trim(), isPartial);

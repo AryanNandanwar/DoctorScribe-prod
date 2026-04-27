@@ -92,7 +92,7 @@ Please provide the clinical note in the following JSON format:
   "medicationPrescribed": "..."
 }`;
   }
-
+  
   private async callBedrock(prompt: string): Promise<string> {
 
     let lastError: Error | undefined;
@@ -275,13 +275,60 @@ Please provide the clinical note in the following JSON format:
             }
             break;
             
+          case 'medicationPrescribed':
+            // Handle complex medication objects
+            if (Array.isArray(value)) {
+              const medications = value.map(med => {
+                if (typeof med === 'string') {
+                  return med;
+                } else if (typeof med === 'object' && med !== null) {
+                  // Convert medication object to readable string
+                  const parts: string[] = [];
+                  if (med.name) parts.push(med.name);
+                  if (med.dosage) parts.push(`(${med.dosage})`);
+                  if (med.duration) parts.push(`for ${med.duration}`);
+                  if (med.instructions) parts.push(`- ${med.instructions}`);
+                  if (med.purpose) parts.push(`[${med.purpose}]`);
+                  return parts.join(' ');
+                }
+                return String(med);
+              });
+              processedNote.medicationPrescribed = medications;
+            } else if (typeof value === 'string') {
+              processedNote.medicationPrescribed = [value];
+            } else if (typeof value === 'object' && value !== null) {
+              // Handle single medication object
+              const med = value as any;
+              const parts: string[] = [];
+              if (med.name) parts.push(med.name);
+              if (med.dosage) parts.push(`(${med.dosage})`);
+              if (med.duration) parts.push(`for ${med.duration}`);
+              if (med.instructions) parts.push(`- ${med.instructions}`);
+              if (med.purpose) parts.push(`[${med.purpose}]`);
+              processedNote.medicationPrescribed = [parts.join(' ')];
+            }
+            break;
+            
+          case 'findings':
+            // Handle findings that can be either array or object
+            if (Array.isArray(value)) {
+              processedNote.findings = value;
+            } else if (typeof value === 'object' && value !== null) {
+              // Convert findings object to array of strings
+              const findingStrings = Object.entries(value).map(([key, val]) => `${key}: ${val}`);
+              processedNote.findings = findingStrings;
+            } else if (typeof value === 'string') {
+              processedNote.findings = [value];
+            }
+            break;
+            
           default:
-            // For array fields (medicalHistory, findings, diagnosis, etc.)
+            // For other array fields (medicalHistory, diagnosis, etc.)
             if (Array.isArray(value)) {
               (processedNote as any)[key] = value;
             } else if (typeof value === 'string') {
               // Convert string to array for fields that should be arrays
-              if (['medicalHistory', 'findings', 'diagnosis', 'investigationsAdvised', 'doctorInstructions', 'medicationPrescribed'].includes(key)) {
+              if (['medicalHistory', 'diagnosis', 'investigationsAdvised', 'doctorInstructions'].includes(key)) {
                 (processedNote as any)[key] = [value];
               } else {
                 (processedNote as any)[key] = value;
@@ -380,60 +427,5 @@ Please provide the clinical note in the following JSON format:
     }
   }
 
-  private fixMalformedJson(jsonString: string): string {
-    try {
-      // Fix common issues with AI-generated JSON
-      
-      // 1. First, completely flatten all objects with dashes into arrays
-      // Handle patterns like:
-      // "problemsFaced": {
-      //   "- Fever",
-      //   "- Leg swelling"
-      // }
-      jsonString = jsonString.replace(
-        /"([^"]+)":\s*\{([^}]*)\}/gs,
-        (match, key, content) => {
-          // Extract all lines that start with dash
-          const lines = content.split('\n').map(line => line.trim()).filter(line => line.startsWith('-'));
-          if (lines.length > 0) {
-            const cleanItems = lines.map(line => {
-              // Remove dash and clean up
-              let cleanItem = line.replace(/^-\s*/, '').trim();
-              // Remove any trailing commas and quotes
-              cleanItem = cleanItem.replace(/,$/, '').replace(/^"|"$/g, '');
-              // Escape any quotes in the content
-              cleanItem = cleanItem.replace(/"/g, '\\"');
-              return `"${cleanItem}"`;
-            });
-            return `"${key}": [${cleanItems.join(', ')}]`;
-          }
-          return match; // Return original if no dash items found
-        }
-      );
-      
-      // 2. Fix patientDetails specific issue - missing quotes
-      jsonString = jsonString.replace(
-        /"patientDetails":\s*"([^"]*)"([^"]*?)?/g,
-        (match, part1, part2) => {
-          // Handle case where second quote is missing
-          const content = (part1 + (part2 || '')).replace(/"/g, '\\"');
-          return `"patientDetails": "${content}"`;
-        }
-      );
-      
-      // 3. Fix trailing commas in arrays/objects
-      jsonString = jsonString.replace(/,\s*([}\]])/g, '$1');
-      
-      // 4. Fix missing quotes around property names (only if not already quoted)
-      jsonString = jsonString.replace(/([{,]\s*)([^"{\s][^:\s]*)(\s*:)/g, '$1"$2"$3');
-      
-      // 5. Fix newlines and extra whitespace in JSON
-      jsonString = jsonString.replace(/\n\s*/g, ' ').replace(/\s+/g, ' ').trim();
-      
-      return jsonString;
-    } catch (error) {
-      this.logger.warn('Failed to fix malformed JSON, returning original:', error);
-      return jsonString;
-    }
-  }
+  
 }

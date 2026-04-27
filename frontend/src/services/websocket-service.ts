@@ -153,9 +153,19 @@ export class SocketIOService {
     this.sendMessage('start_recording', { sessionId });
   }
 
-  stopRecording(sessionId: string) {
-    console.log("🛑 WebSocket: stopRecording called with session:", sessionId);
-    this.sendMessage('stop_recording', { sessionId });
+  stopRecording(sessionId: string, doctorId: string) {
+    // Generate UUID for the note
+    const noteId = crypto.randomUUID();
+    console.log("🛑 WebSocket: stopRecording called with session:", sessionId, {
+      noteId,
+      doctorId
+    });
+    this.sendMessage('stop_recording', { 
+      sessionId, 
+      noteId, 
+      doctorId 
+    });
+    return noteId; // Return the generated noteId for frontend to track
   }
 
   onMessage(callback: (message: any) => void) {

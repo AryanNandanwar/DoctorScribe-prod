@@ -22,20 +22,14 @@ export class ClinicalNotesService {
 
   ) {}
 
-  async create(dto: CreateClinicalNoteDto, doctorId: string, patientId: string): Promise<ClinicalNote> {
+  async create(dto: CreateClinicalNoteDto, doctorId: string): Promise<ClinicalNote> {
 
     const doctor = await this.doctorRepo.findOne({ where: { id: doctorId } });
     if (!doctor) {
       throw new NotFoundException('Doctor not found');
     }
 
-      // 2. Validate patient
-    const patient = await this.patientRepo.findOne({ where: { id: patientId } });
-    if (!patient) {
-      throw new NotFoundException('Patient not found');
-    }
-
-    
+ 
     const payload: Partial<ClinicalNote> = {
       patientDetails: dto.patientDetails ? JSON.stringify(dto.patientDetails) : '{}',
       medicalHistory: dto.medicalHistory ? JSON.stringify(dto.medicalHistory) : '[]',
@@ -46,10 +40,37 @@ export class ClinicalNotesService {
       diagnosis: dto.diagnosis ? JSON.stringify(dto.diagnosis) : '[]',
       investigationsAdvised: dto.investigationsAdvised ? JSON.stringify(dto.investigationsAdvised) : '[]',
       doctor: doctor,
-      patient: patient,
-    };
+      status: 'Draft',
+    };  
 
     console.log('Creating clinical note with payload:', payload);
+
+    const note = this.notesCollection.create(payload);
+    return await this.notesCollection.save(note);
+  }
+
+  async createWithId(dto: CreateClinicalNoteDto, doctorId: string, noteId: string): Promise<ClinicalNote> {
+    const doctor = await this.doctorRepo.findOne({ where: { id: doctorId } });
+    if (!doctor) {
+      throw new NotFoundException('Doctor not found');
+    }
+
+    const payload: Partial<ClinicalNote> = {
+      id: noteId, // Set the specific ID
+      patientDetails: dto.patientDetails ? JSON.stringify(dto.patientDetails) : '{}',
+      medicalHistory: dto.medicalHistory ? JSON.stringify(dto.medicalHistory) : '[]',
+      problemsFaced: dto.problemFaced ? JSON.stringify(dto.problemFaced) : '[]',
+      doctorInstructions: dto.doctorInstructions ? JSON.stringify(dto.doctorInstructions) : '[]',
+      medicationPrescribed: dto.medicationPrescribed ? JSON.stringify(dto.medicationPrescribed) : '[]',
+      findings: dto.findings ? JSON.stringify(dto.findings) : '[]',
+      diagnosis: dto.diagnosis ? JSON.stringify(dto.diagnosis) : '[]',
+      investigationsAdvised: dto.investigationsAdvised ? JSON.stringify(dto.investigationsAdvised) : '[]',
+      doctor: doctor,
+      patientId: null, // Explicitly set to null - should work with proper FK constraint
+      status: 'Draft',
+    };
+
+    console.log('Creating clinical note with specific ID:', { noteId, payload });
 
     const note = this.notesCollection.create(payload);
     return await this.notesCollection.save(note);
@@ -113,6 +134,21 @@ export class ClinicalNotesService {
     }
     if (dto.investigationsAdvised !== undefined) {
       note.investigationsAdvised = JSON.stringify(dto.investigationsAdvised);
+    }
+    if(dto.status == 'Draft'){
+      note.status = 'Confirmed';
+    }
+
+    // Handle patient assignment
+    if (dto.patientId !== undefined && dto.patientId) {
+      // Assign patient to note
+      const patient = await this.patientRepo.findOne({ where: { id: dto.patientId } });
+      if (!patient) {
+        throw new NotFoundException('Patient not found');
+      }
+      note.patient = patient;
+      note.patientId = dto.patientId;
+      console.log(`✅ Assigned patient ${dto.patientId} to clinical note ${id}`);
     }
 
     return await this.notesCollection.save(note);

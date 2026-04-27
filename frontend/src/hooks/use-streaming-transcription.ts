@@ -179,7 +179,7 @@ export const useStreamingTranscription = ({
     }
   }, []);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback((noteId?: string, doctorId?: string) => {
     console.log("🛑 Stopping recording...");
     console.log("📨 WebSocket status before stop:", wsRef.current?.isConnected());
     
@@ -191,7 +191,25 @@ export const useStreamingTranscription = ({
     if (wsRef.current && sessionIdRef.current) {
       console.log("📡 Sending stop_recording message to server...");
       console.log("🆔 Session ID being stopped:", sessionIdRef.current);
-      wsRef.current.stopRecording(sessionIdRef.current);
+      console.log("📋 Additional parameters:", { noteId, doctorId });
+      
+      if (!doctorId) {
+        console.error("❌ Doctor ID is required for new clinical note flow");
+        setState(prev => ({
+          ...prev,
+          error: 'Doctor ID is required to save clinical note'
+        }));
+        return;
+      }
+      
+      const generatedNoteId = wsRef.current.stopRecording(sessionIdRef.current, doctorId);
+      console.log("🆔 Generated note ID:", generatedNoteId);
+      
+      // Store the generated note ID for tracking
+      setState(prev => ({
+        ...prev,
+        noteId: generatedNoteId
+      }));
     } else {
       console.warn(" No WebSocket connection or session ID available for stopping");
     }
@@ -199,7 +217,7 @@ export const useStreamingTranscription = ({
     // Emit session end event
     onSessionEnd?.();
 
-    // Note: Final note handling is now done by use-sse-transcription
+    // Note: Final note handling is now done by Supabase subscription
 
     // Clean up audio resources
     console.log(" Cleaning up audio resources...");

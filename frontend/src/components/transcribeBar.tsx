@@ -7,6 +7,15 @@ import DownloadIcon from "@mui/icons-material/Download";
 import { useStreamingTranscription } from "../hooks/use-streaming-transcription";
 import { useNavigate } from "react-router-dom";
 
+// UUID generation utility
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 interface AudioRecorderProps {
   onError?: (error: string) => void;
   isGeneratingNote?: boolean;
@@ -15,6 +24,7 @@ interface AudioRecorderProps {
   onSessionStart?: (sessionId: string) => void;
   onSessionEnd?: () => void;
   websocketUrl?: string;
+  patientId?: string;
 }
 
 export const AudioRecorder: React.FC<AudioRecorderProps> = ({
@@ -23,7 +33,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   isNoteReady = false,
   onSessionStart,
   onSessionEnd,
-  websocketUrl = 'http://localhost:3000'
+  websocketUrl = 'http://localhost:3000',
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [wakeLock, setWakeLock] = useState<any>(null);
@@ -67,6 +77,19 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
   };
 
+  const getDoctorId = () => {
+    try {
+      const userStr = localStorage.getItem("ds_user") ?? sessionStorage.getItem("ds_user");
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        return user.id;
+      }
+    } catch (err) {
+      console.error("Failed to get doctor ID:", err);
+    }
+    return null;
+  };
+
   useEffect(() => {
     checkAuth();
 
@@ -103,9 +126,25 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
 
   const handleStopRecording = async () => {
     try {
-      await stopRecording();
+      // Generate unique note ID
+      const noteId = generateUUID();
+      
+      // Get doctor ID from stored user data
+      const doctorId = getDoctorId();
+      
+      if (!doctorId) {
+        onError?.("Doctor ID not found. Please log in again.");
+        return;
+      }
+
+      console.log("📋 Stopping recording with data:", {
+        noteId,
+        doctorId
+      });
+
+      await stopRecording(noteId, doctorId);
       releaseWakeLock();
-      // Note: Final note processing is now handled by SSE service
+      // Note: Final note processing is now handled by backend storage
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to stop recording";
       onError?.(errorMessage);
@@ -450,7 +489,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
                   variant="contained"
                   color="error"
                   startIcon={<StopIcon />}
-                  onClick={handleStopRecording}
+                  onClick={() => handleStopRecording()}
                   className="normal-case"
                 >
                   Stop Recording

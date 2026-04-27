@@ -52,6 +52,9 @@ export class UpdateClinicalNoteDto {
       @IsString({ each: true })
       investigationsAdvised?: string[];
 
+      @IsString()
+      status?: 'Draft' | 'Confirmed';
+
       patientId?: string;
 
 }

@@ -72,6 +72,7 @@ export class AudioUploadController {
   async uploadAudio(
     @UploadedFile() file: UploadedFile,
     @Req() req: Request,
+    @Body() body: { patientId?: string; doctorId?: string } = {},
   ) {
     try {
       this.logger.log(`Processing audio upload: ${file.originalname} (${file.size} bytes)`);
@@ -90,8 +91,15 @@ export class AudioUploadController {
       // Process the entire audio file at once
       await this.streamingService.processAudioChunk(clientId, audioBuffer.buffer, Date.now());
 
-      // Stop the session to trigger final note generation
-      await this.streamingService.stopRecording(clientId, sessionId);
+      // Stop the session to trigger final note generation (only if patientId and doctorId provided)
+      if (body.patientId && body.doctorId) {
+        await this.streamingService.stopRecording(clientId, sessionId, body.patientId, body.doctorId);
+      } else {
+        // Skip note storage if patient/doctor info not provided
+        this.logger.log('Skipping clinical note storage - patientId and doctorId not provided');
+        // Call a version that doesn't store notes
+        await this.streamingService.stopRecordingWithoutNoteStorage(clientId, sessionId);
+      }
 
       // Clean up the uploaded file
       fs.unlinkSync(file.path);

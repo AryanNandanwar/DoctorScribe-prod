@@ -29,8 +29,7 @@ export class ClinicalNotesController {
   @Post()
   async create(@Req() req: any, @Body() dto: CreateClinicalNoteDto) {
     const doctorId = req.user.id; // <-- depends on your JWT payload
-    const patientId = dto.patientId;
-    return this.clinicalNotesService.create(dto, doctorId, patientId);
+    return this.clinicalNotesService.create(dto, doctorId);
   }
 
   @Get()

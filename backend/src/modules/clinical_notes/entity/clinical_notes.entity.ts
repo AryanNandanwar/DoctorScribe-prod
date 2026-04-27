@@ -19,6 +19,10 @@ export class ClinicalNote {
   @Index() // helps searches
   problemsFaced: string;
 
+  @Column({type: 'enum', enum: ['Draft', 'Confirmed'], name: 'status', default: 'Draft'})
+  @Index() // helps searches
+  status: string;
+
   @Column({ type: 'text', name: 'doctor_instructions' })
   @Index() // helps searches
   doctorInstructions: string;
@@ -45,8 +49,8 @@ export class ClinicalNote {
   @Column({ name: 'doctor_id', type: 'uuid' })
   doctorId: string;
 
-  @Column({ name: 'patient_id', type: 'uuid' })
-  patientId: string;
+  @Column({ name: 'patient_id', type: 'uuid', nullable: true, default: null })
+  patientId: string | null;
 
   // --- Relations ---
   @ManyToOne(() => Doctor, (doctor) => doctor.clinicalNotes, {
@@ -59,6 +63,7 @@ export class ClinicalNote {
   @ManyToOne(() => Patient, (patient) => patient.clinicalNotes, {
     eager: false,
     onDelete: 'CASCADE',
+    nullable: true,
   })
   @JoinColumn({ name: 'patient_id' })
   patient: Patient;

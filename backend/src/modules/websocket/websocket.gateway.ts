@@ -82,25 +82,26 @@ export class StreamingWebSocketGateway implements OnGatewayInit, OnGatewayConnec
 
   @SubscribeMessage('stop_recording')
   async handleStopRecording(
-    @MessageBody() data: { sessionId: string },
+    @MessageBody() data: { sessionId: string; noteId?: string; doctorId?: string },
     @ConnectedSocket() client: Socket,
   ) {
     try {
-      this.logger.log(`🛑 Stopping recording session: ${data.sessionId} for client: ${client.id}`);
+      this.logger.log(`Stopping recording session: ${data.sessionId} for client: ${client.id}`);
+      this.logger.log(`Additional data:`, { noteId: data.noteId, doctorId: data.doctorId });
       
-      const result = await this.streamingService.stopRecording(client.id, data.sessionId);
-      this.logger.log(`✅ Recording stopped successfully for session: ${data.sessionId}`);
-      this.logger.log(`🏥 Clinical note generation should be triggered now...`);
+      const result = await this.streamingService.stopRecording(client.id, data.sessionId, data.noteId || '', data.doctorId);
+      this.logger.log(`Recording stopped successfully for session: ${data.sessionId}`);
+      this.logger.log(`Clinical note stored in backend...`);
       
       client.emit('recording_status', {
         type: 'recording_status',
-        data: { status: 'stopped', sessionId: data.sessionId },
+        data: { status: 'stopped', sessionId: data.sessionId, noteId: data.noteId },
         timestamp: Date.now(),
       });
 
       return result;
     } catch (error) {
-      this.logger.error(`❌ Failed to stop recording: ${error.message}`);
+      this.logger.error(`Failed to stop recording: ${error.message}`);
       
       client.emit('error', {
         type: 'error',

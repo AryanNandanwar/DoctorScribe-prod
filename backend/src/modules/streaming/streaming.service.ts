@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SonioxClientService } from './soniox-client.service';
 import { IncrementalNoteService } from './incremental-note.service';
-import { SseService } from '../sse/sse.service';
+import { ClinicalNotesService } from '../clinical_notes/clinical-notes.service';
+import { CreateClinicalNoteDto } from '../clinical_notes/dto/clinical-note.dto';
 
 export interface StreamingSession {
   clientId: string;
   sessionId: string;
   isRecording: boolean;
   startTime: number;
-  transcriptBuffer: string[];
 }
 
 @Injectable()
@@ -20,7 +20,7 @@ export class StreamingService {
   constructor(
     private readonly sonioxClient: SonioxClientService,
     private readonly incrementalNoteService: IncrementalNoteService,
-    private readonly sseService: SseService,
+    private readonly clinicalNotesService: ClinicalNotesService,
   ) {}
 
   async startRecording(clientId: string, sessionId: string): Promise<void> {
@@ -32,15 +32,14 @@ export class StreamingService {
       sessionId,
       isRecording: true,
       startTime: Date.now(),
-      transcriptBuffer: [],
     };
 
     this.sessions.set(sessionId, session);
 
     // Start Soniox streaming connection
     try {
-      await this.sonioxClient.startSession(sessionId, (transcript, isPartial) => {
-        this.handleTranscriptUpdate(sessionId, transcript, isPartial);
+      await this.sonioxClient.startSession(sessionId, () => {
+        // No-op - we don't handle transcript updates during streaming
       });
     } catch (error) {
       this.logger.error(`Failed to start Soniox session: ${error.message}`);
@@ -50,8 +49,8 @@ export class StreamingService {
     }
   }
 
-  async stopRecording(clientId: string, sessionId: string): Promise<void> {
-    this.logger.log(`Stopping recording session ${sessionId} for client ${clientId}`);
+  async stopRecording(clientId: string, sessionId: string, noteId: string, doctorId?: string): Promise<void> {
+    this.logger.log(`Stopping recording session ${sessionId} for client ${clientId} with noteId: ${noteId}`);
 
     const session = this.sessions.get(sessionId);
     if (!session) {
@@ -60,18 +59,27 @@ export class StreamingService {
 
     session.isRecording = false;
 
-    // Stop Soniox streaming connection
+    // Get final transcript BEFORE stopping the Soniox session
+    let finalTranscript = '';
+    if (doctorId) {
+      try {
+        const transcriptBuffer = this.sonioxClient.getFinalTranscript(sessionId);
+        finalTranscript = this.createCleanTranscript(transcriptBuffer);
+        this.logger.log(`Final transcript for note generation: ${finalTranscript.substring(0, 400)}...`);
+      } catch (error) {
+        this.logger.error(`Failed to get final transcript: ${error.message}`);
+      }
+    }
+
+    // Now stop Soniox streaming connection
     try {
       await this.sonioxClient.stopSession(sessionId);
     } catch (error) {
       this.logger.error(`Failed to stop Soniox session: ${error.message}`);
     }
 
-    // Generate final note
-    try {
-      const finalTranscript = this.createCleanTranscript(session.transcriptBuffer);
-      this.logger.log(`Final transcript for note generation: ${finalTranscript.substring(0, 200)}...`);
-      
+    // Generate final note and store in backend if doctorId is provided and we have transcript
+    if (doctorId) {
       // Check if we have meaningful transcript content
       if (!finalTranscript || finalTranscript.trim().length === 0) {
         this.logger.warn('Empty transcript, skipping note generation');
@@ -84,13 +92,17 @@ export class StreamingService {
         return;
       }
       
-      const finalNote = await this.incrementalNoteService.generateFinalNote(finalTranscript);
-      
-      // Send final complete note via SSE (keeps connection open even if WebSocket closes)
-      this.logger.log(`Sending final note via SSE for session ${sessionId}`);
-      this.sseService.sendFinalNote(sessionId, finalNote);
-    } catch (error) {
-      this.logger.error(`Failed to generate final note: ${error.message}`);
+      try {
+        const finalNote = await this.incrementalNoteService.generateFinalNote(finalTranscript);
+        
+        // Convert ParsedNote to CreateClinicalNoteDto and store in backend
+        this.logger.log(`Storing clinical note in backend for session ${sessionId} with noteId: ${noteId}`);
+        await this.storeClinicalNote(finalNote, doctorId, noteId);
+      } catch (error) {
+        this.logger.error(`Failed to generate and store final note: ${error.message}`);
+      }
+    } else {
+      this.logger.warn(`Doctor ID not provided, skipping note storage`);
     }
 
     // Clean up session after a delay
@@ -127,29 +139,7 @@ export class StreamingService {
     }
   }
 
-  private handleTranscriptUpdate(sessionId: string, transcript: string, isPartial: boolean): void {
-    const session = this.sessions.get(sessionId);
-    if (!session) {
-      return;
-    }
-
-    // Send transcript to client immediately
-    this.sendTranscriptUpdate(session.clientId, transcript, isPartial);
-
-    // For partial transcripts, avoid duplicates by checking if it's substantially different
-    if (isPartial) {
-      const lastTranscript = session.transcriptBuffer[session.transcriptBuffer.length - 1];
-      if (!lastTranscript || !this.areTranscriptsSimilar(lastTranscript, transcript)) {
-        session.transcriptBuffer.push(transcript);
-        
-      }
-    } else {
-      // Always add final transcripts
-      session.transcriptBuffer.push(transcript);
-
-    }
-  }
-
+  
   private createCleanTranscript(transcriptBuffer: string[]): string {
     if (!transcriptBuffer || transcriptBuffer.length === 0) {
       return '';
@@ -218,12 +208,7 @@ export class StreamingService {
     });
   }
 
-  private sendTranscriptUpdate(clientId: string, transcript: string, isPartial: boolean): void {
-    if (this.webSocketGateway) {
-      this.webSocketGateway.sendTranscriptToClient(clientId, transcript, isPartial);
-    }
-  }
-
+  
 
   // Method to get WebSocket gateway instance (to be injected)
   setWebSocketGateway(gateway: any) {
@@ -236,6 +221,64 @@ export class StreamingService {
   findClientIdBySessionId(sessionId: string): string | null {
     const session = this.sessions.get(sessionId);
     return session?.clientId || null;
+  }
+
+  private async storeClinicalNote(finalNote: any, doctorId: string, noteId: string): Promise<void> {
+    try {
+      // Convert ParsedNote to CreateClinicalNoteDto format
+      const createDto: CreateClinicalNoteDto = {
+
+        patientDetails: finalNote.patientDetails || {},
+        medicalHistory: this.ensureArray(finalNote.medicalHistory),
+        problemFaced: this.ensureArray(finalNote.problemFaced),
+        findings: this.ensureArray(finalNote.findings),
+        diagnosis: this.ensureArray(finalNote.diagnosis),
+        investigationsAdvised: this.ensureArray(finalNote.investigationsAdvised),
+        doctorInstructions: this.ensureArray(finalNote.doctorInstructions),
+        medicationPrescribed: this.ensureArray(finalNote.medicationPrescribed),
+        status: 'Draft',
+      };
+
+      // Store the clinical note with specific ID
+      await this.clinicalNotesService.createWithId(createDto, doctorId, noteId);
+      this.logger.log(`Clinical note stored successfully for doctor ${doctorId} with noteId: ${noteId}`);
+    } catch (error) {
+      this.logger.error(`Failed to store clinical note: ${error.message}`);
+      throw error;
+    }
+  }
+
+  private ensureArray(value: any): string[] {
+    if (Array.isArray(value)) {
+      return value.map(item => typeof item === 'string' ? item : String(item));
+    }
+    if (typeof value === 'string') {
+      return value ? [value] : [];
+    }
+    return [];
+  }
+
+  async stopRecordingWithoutNoteStorage(clientId: string, sessionId: string): Promise<void> {
+    this.logger.log(`Stopping recording session ${sessionId} for client ${clientId} (without note storage)`);
+
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+
+    session.isRecording = false;
+
+    // Stop Soniox streaming connection
+    try {
+      await this.sonioxClient.stopSession(sessionId);
+    } catch (error) {
+      this.logger.error(`Failed to stop Soniox session: ${error.message}`);
+    }
+
+    // Clean up session after a delay
+    setTimeout(() => {
+      this.sessions.delete(sessionId);
+    }, 5000);
   }
 
   // Expose this method for SonioxClientService
