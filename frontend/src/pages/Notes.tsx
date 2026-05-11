@@ -32,12 +32,17 @@ type ClinicalNote = {
   } | null;
   medicalHistory: string;
   problemsFaced: string;
+  findings?: string;
+  diagnosis?: string;
+  investigationsAdvised?: string;
   doctorInstructions: string;
   medicationPrescribed: string;
   patientDetails?: Record<string, string>;
 };
 
-const parseText = (v: string) => {
+const parseText = (v?: string) => {
+  if (!v) return "";
+
   try {
     const parsed = JSON.parse(v);
     return Array.isArray(parsed) ? parsed.join(", ") : parsed;
@@ -63,6 +68,9 @@ export default function NotesPage() {
   const [editForm, setEditForm] = useState({
     medicalHistory: "",
     problemsFaced: "",
+    findings: "",
+    diagnosis: "",
+    investigationsAdvised: "",
     doctorInstructions: "",
     medicationPrescribed: "",
   });
@@ -101,6 +109,9 @@ export default function NotesPage() {
     setEditForm({
       medicalHistory: note.medicalHistory,
       problemsFaced: note.problemsFaced,
+      findings: note.findings || "",
+      diagnosis: note.diagnosis || "",
+      investigationsAdvised: note.investigationsAdvised || "",
       doctorInstructions: note.doctorInstructions,
       medicationPrescribed: note.medicationPrescribed,
     });
@@ -251,10 +262,13 @@ export default function NotesPage() {
         const matchesSearch =
           search === "" ||
           (n.patient?.fullName || '').toLowerCase().includes(searchLower) ||
-          n.medicalHistory.toLowerCase().includes(searchLower) ||
-          n.problemsFaced.toLowerCase().includes(searchLower) ||
-          n.doctorInstructions.toLowerCase().includes(searchLower) ||
-          n.medicationPrescribed.toLowerCase().includes(searchLower);
+          (n.medicalHistory || '').toLowerCase().includes(searchLower) ||
+          (n.problemsFaced || '').toLowerCase().includes(searchLower) ||
+          (n.findings || '').toLowerCase().includes(searchLower) ||
+          (n.diagnosis || '').toLowerCase().includes(searchLower) ||
+          (n.investigationsAdvised || '').toLowerCase().includes(searchLower) ||
+          (n.doctorInstructions || '').toLowerCase().includes(searchLower) ||
+          (n.medicationPrescribed || '').toLowerCase().includes(searchLower);
 
         // 2. Date Filter
         const noteDate = new Date(n.createdAt).toISOString().split("T")[0];
@@ -400,6 +414,12 @@ export default function NotesPage() {
                 <CardContent className="space-y-5 px-6 py-5">
                   <MedicalBlock title="Medical History" value={n.medicalHistory} />
                   <MedicalBlock title="Problems Faced" value={n.problemsFaced} />
+                  <MedicalBlock title="Findings" value={n.findings} />
+                  <MedicalBlock title="Diagnosis" value={n.diagnosis} />
+                  <MedicalBlock
+                    title="Investigations Advised"
+                    value={n.investigationsAdvised}
+                  />
                   <MedicalBlock
                     title="Doctor Instructions"
                     value={n.doctorInstructions}
@@ -452,6 +472,30 @@ export default function NotesPage() {
             onChange={(e) => setEditForm(prev => ({ ...prev, problemsFaced: e.target.value }))}
           />
           <TextField
+            label="Findings"
+            multiline
+            rows={3}
+            fullWidth
+            value={editForm.findings}
+            onChange={(e) => setEditForm(prev => ({ ...prev, findings: e.target.value }))}
+          />
+          <TextField
+            label="Diagnosis"
+            multiline
+            rows={3}
+            fullWidth
+            value={editForm.diagnosis}
+            onChange={(e) => setEditForm(prev => ({ ...prev, diagnosis: e.target.value }))}
+          />
+          <TextField
+            label="Investigations Advised"
+            multiline
+            rows={3}
+            fullWidth
+            value={editForm.investigationsAdvised}
+            onChange={(e) => setEditForm(prev => ({ ...prev, investigationsAdvised: e.target.value }))}
+          />
+          <TextField
             label="Doctor Instructions"
             multiline
             rows={3}
@@ -486,7 +530,7 @@ export default function NotesPage() {
   );
 }
 
-function MedicalBlock({ title, value }: { title: string; value: string }) {
+function MedicalBlock({ title, value }: { title: string; value?: string }) {
   const parsed = parseText(value);
 
   return (

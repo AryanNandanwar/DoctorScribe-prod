@@ -83,14 +83,16 @@ ${fullTranscript}
 Please provide the clinical note in the following JSON format:
 {
   "patientDetails": "...",
-  "medicalHistory": "...",
-  "problemsFaced": "...",
-  "findings": "...",
-  "diagnosis": "...",
-  "investigationsAdvised": "...",
-  "doctorInstructions": "...",
-  "medicationPrescribed": "..."
-}`;
+  "medicalHistory": ["..."],
+  "problemFaced": ["..."],
+  "findings": ["..."],
+  "diagnosis": ["..."],
+  "investigationsAdvised": ["..."],
+  "doctorInstructions": ["..."],
+  "medicationPrescribed": ["..."]
+}
+
+Return valid JSON only. Use arrays for every section that can contain multiple items. Do not use objects as lists.`;
   }
   
   private async callBedrock(prompt: string): Promise<string> {
@@ -203,6 +205,7 @@ Please provide the clinical note in the following JSON format:
       
       // Fix common JSON formatting issues before parsing
       let sanitizedResponse = cleanedResponse;
+      sanitizedResponse = this.convertListObjectsToArrays(sanitizedResponse);
       
       // Fix invalid property names that start with hyphens (common LLM output issue)
       sanitizedResponse = sanitizedResponse.replace(/"(-\s*[^"]+)":/g, (match, propName) => {
@@ -260,7 +263,9 @@ Please provide the clinical note in the following JSON format:
                 const lines = value.split(/[,\n]/).map(line => line.trim());
                 lines.forEach(line => {
                   if (line.includes(':')) {
-                    const [k, v] = line.split(':').map(s => s.trim());
+                    const separatorIndex = line.indexOf(':');
+                    const k = line.slice(0, separatorIndex).trim();
+                    const v = line.slice(separatorIndex + 1).trim();
                     if (k && v) details[k] = v;
                   } else if (line.startsWith('-')) {
                     const cleanLine = line.replace(/^[-\s]+/, '').trim();
@@ -382,6 +387,43 @@ Please provide the clinical note in the following JSON format:
       // Fallback: return default structure
       return defaultSections;
     }
+  }
+
+  private convertListObjectsToArrays(jsonLike: string): string {
+    const listFields = [
+      'medicalHistory',
+      'problemFaced',
+      'problemsFaced',
+      'findings',
+      'diagnosis',
+      'investigationsAdvised',
+      'doctorInstructions',
+      'medicationPrescribed',
+    ];
+
+    return listFields.reduce((current, field) => {
+      const fieldPattern = new RegExp(`("${field}"\\s*:\\s*)\\{\\s*([\\s\\S]*?)\\s*\\}`, 'g');
+
+      return current.replace(fieldPattern, (match, prefix, content) => {
+        const withoutStrings = content
+          .replace(/"(?:\\.|[^"\\])*"/g, '')
+          .replace(/[,\s]/g, '');
+
+        if (withoutStrings.length > 0) {
+          return match;
+        }
+
+        const items = content
+          .match(/"(?:\\.|[^"\\])*"/g)
+          ?.map((item) => item.replace(/^"\s*-?\s*/, '"'));
+
+        if (!items || items.length === 0) {
+          return match;
+        }
+
+        return `${prefix}[${items.join(', ')}]`;
+      });
+    }, jsonLike);
   }
 
   // Helper method to get default note structure

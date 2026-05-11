@@ -17,6 +17,18 @@ import ConfirmDialog from "./ConfirmDialog";
 import NoPatientFoundDialog from "./NoPatientFoundDialog";
 import { type ParsedNote } from "../types/clinical-note";
 import { useClinicalNoteSubscription } from "../hooks/use-clinical-note-subscription";
+import {
+  mapClinicalNoteRecordToParsedNote,
+  parsePatientDetails,
+  parseStringContent,
+} from "../utils/clinical-note-record";
+
+const patientDetailFields = [
+  { key: 'name', label: 'Name' },
+  { key: 'age', label: 'Age' },
+  { key: 'gender', label: 'Gender' },
+  { key: 'contact', label: 'Contact' }
+];
 
 type Props = {
   source?: ParsedNote; // Optional for new flow
@@ -60,17 +72,7 @@ export default function ClinicalNoteViewer({
     noteId,
     onNoteGenerated: (note) => {
       console.log('📋 Clinical note received from Supabase:', note);
-      // Convert backend note format to ParsedNote format
-      const parsedNote: ParsedNote = {
-        patientDetails: parsePatientDetails(note.patient_details),
-        medicalHistory: parseStringContent(note.medical_history),
-        problemFaced: parseStringContent(note.problems_faced).join(', '),
-        findings: parseStringContent(note.findings),
-        diagnosis: parseStringContent(note.diagnosis),
-        investigationsAdvised: parseStringContent(note.investigations_advised),
-        doctorInstructions: parseStringContent(note.doctor_instructions),
-        medicationPrescribed: parseStringContent(note.medication_prescribed),
-      };
+      const parsedNote = mapClinicalNoteRecordToParsedNote(note);
       console.log('📋 Parsed note data:', parsedNote);
       console.log('📋 Patient Details:', parsedNote.patientDetails);
       console.log('📋 Medical History:', parsedNote.medicalHistory);
@@ -141,77 +143,6 @@ export default function ClinicalNoteViewer({
     setToastOpen(true);
   };
 
-  // Parse patient details from string format
-  const parsePatientDetails = (patientDetails: any): Record<string, string> => {
-    if (typeof patientDetails === 'object' && patientDetails !== null) {
-      return patientDetails;
-    }
-    
-    if (typeof patientDetails === 'string') {
-      const details: Record<string, string> = {};
-      // Parse "Name: Amol Gaikwad (Daivashala), Age: 16 years, Gender: Female"
-      const parts = patientDetails.split(',').map(part => part.trim());
-      
-      parts.forEach(part => {
-        const match = part.match(/^(Name|Age|Gender|Contact):\s*(.+)$/);
-        if (match) {
-          const [, key, value] = match;
-          details[key.toLowerCase()] = value.trim();
-        }
-      });
-      
-      return details;
-    }
-    
-    return {};
-  };
-
-  // Parse string content into array of entries
-  const parseStringContent = (content: any): string[] => {
-    if (Array.isArray(content)) {
-      return content;
-    }
-    
-    if (typeof content === 'string' && content.trim()) {
-      let processedContent = content.trim();
-      
-      // Handle JSON string format like ["G2P1 - Previous normal delivery\nCurrent pregnancy at 3 months gestation"]
-      if (processedContent.startsWith('[') && processedContent.endsWith(']')) {
-        try {
-          // Try to parse as JSON array
-          const parsed = JSON.parse(processedContent);
-          if (Array.isArray(parsed)) {
-            processedContent = parsed.join('\n');
-          }
-        } catch (e) {
-          // If JSON parsing fails, remove brackets and quotes manually
-          processedContent = processedContent
-            .slice(1, -1) // Remove [ and ]
-            .replace(/^"|"$/g, '') // Remove surrounding quotes
-            .replace(/"/g, '') // Remove all remaining quotes
-            .replace(/^\[|\]$/g, '') // Remove any remaining brackets
-            .replace(/^\[|\]$/g, ''); // Double check for brackets
-        }
-      }
-      
-      // Also handle cases where brackets might be in the middle of the content
-      processedContent = processedContent
-        .replace(/^\[|\]$/g, '') // Remove brackets at start/end
-        .replace(/^"|"$/g, '') // Remove quotes at start/end
-        .replace(/"/g, ''); // Remove all remaining quotes
-      
-      // Split by \n, commas, periods, and other common delimiters
-      const items = processedContent
-        .split(/(?:\\n|\n|,\s*|\.\s*|\r\n)/)
-        .map(item => item.trim())
-        .filter(item => item.length > 0 && item !== 'Not mentioned' && item !== '""');
-      
-      return items;
-    }
-    
-    return [];
-  };
-
   // Helper function to render nested objects properly
   const renderNestedValue = (value: any): string => {
     if (value === null || value === undefined) {
@@ -246,13 +177,100 @@ export default function ClinicalNoteViewer({
     return String(value);
   };
 
+  const getPatientDetailValue = (details: Record<string, string> | undefined, key: string): string => {
+    if (!details) return '';
+
+    return details[key] ||
+      details[key.charAt(0).toUpperCase() + key.slice(1)] ||
+      details[key === 'name' ? 'Name' : key === 'age' ? 'Age' : key === 'gender' ? 'Gender' : key === 'contact' ? 'Contact' : ''] ||
+      '';
+  };
+
+  const renderArraySection = (items: unknown) => {
+    if (!Array.isArray(items) || items.length === 0) {
+      return <Typography variant="body2" className="mt-2">&nbsp;</Typography>;
+    }
+
+    return (
+      <div className="mt-2">
+        {items.map((item, index) => (
+          <Typography key={index} variant="body2" className="mb-1">
+            • {renderNestedValue(item)}
+          </Typography>
+        ))}
+      </div>
+    );
+  };
+
+  const renderFlexibleSection = (value: unknown) => {
+    if (Array.isArray(value)) {
+      return renderArraySection(value);
+    }
+
+    if (!value) {
+      return <Typography variant="body2" className="mt-2">&nbsp;</Typography>;
+    }
+
+    if (typeof value === 'object') {
+      const entries = Object.entries(value);
+      if (entries.length === 0) {
+        return <Typography variant="body2" className="mt-2">&nbsp;</Typography>;
+      }
+
+      return (
+        <div className="mt-2">
+          {entries.map(([key, entryValue]) => (
+            <Typography key={key} variant="body2" className="mb-1">
+              • <strong>{key}:</strong> {renderNestedValue(entryValue)}
+            </Typography>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <Typography variant="body2" className="mt-2">
+        {String(value)}
+      </Typography>
+    );
+  };
+
+  const renderMedicationSection = (medications: ParsedNote['medicationPrescribed']) => {
+    if (!Array.isArray(medications) || medications.length === 0) {
+      return <Typography variant="body2" className="mt-2">&nbsp;</Typography>;
+    }
+
+    return (
+      <div className="mt-2">
+        {medications.map((medication, index) => (
+          <Typography key={index} variant="body2" className="mb-1">
+            {typeof medication === 'string'
+              ? `• ${medication}`
+              : typeof medication === 'object' && medication !== null
+                ? (() => {
+                    const parts = [];
+                    if (medication.name) parts.push(medication.name);
+                    if (medication.dosage) parts.push(`(${medication.dosage})`);
+                    if (medication.duration) parts.push(`for ${medication.duration}`);
+                    if (medication.instructions) parts.push(`- ${medication.instructions}`);
+                    if (medication.purpose) parts.push(`[${medication.purpose}]`);
+                    return `• ${parts.join(' ')}`;
+                  })()
+                : `• ${renderNestedValue(medication)}`
+            }
+          </Typography>
+        ))}
+      </div>
+    );
+  };
+
   // Search for patient in database
   const searchPatient = async (patientName: string) => {
     if (!patientName.trim()) return null;
     
     setPatientSearchLoading(true);
     try {
-      const response = await api.get(`/doctor/me/patients?q=${encodeURIComponent(patientName.trim())}`);
+      const response = await api.get(`/api/doctor/me/patients?q=${encodeURIComponent(patientName.trim())}`);
       const patients = response.data;
       
       if (patients && patients.length > 0) {
@@ -363,7 +381,7 @@ export default function ClinicalNoteViewer({
     
     try {
       // Create new patient
-      const patientResponse = await api.post('/doctor/me/patients', patientData);
+      const patientResponse = await api.post('/api/doctor/me/patients', patientData);
       const newPatient = patientResponse.data;
       
       // Save note with new patient ID
@@ -383,11 +401,9 @@ export default function ClinicalNoteViewer({
     
     const sections = [];
     
-    if (parsed.patientDetails && Object.keys(parsed.patientDetails).length > 0) {
-      sections.push('Patient Details\n' + Object.entries(parsed.patientDetails)
-        .map(([key, value]) => `${key}: ${value}`)
-        .join('\n'));
-    }
+    sections.push('Patient Details\n' + patientDetailFields
+      .map(({ key, label }) => `${label}: ${getPatientDetailValue(parsed.patientDetails, key)}`)
+      .join('\n'));
     
     const arrayFields = [
       { name: 'Medical History', data: parsed.medicalHistory },
@@ -400,24 +416,22 @@ export default function ClinicalNoteViewer({
     ];
     
     arrayFields.forEach(({ name, data }) => {
-      if (data && Array.isArray(data) && data.length > 0) {
-        const items = data.map(item => {
-          if (typeof item === 'string') {
-            return `• ${item}`;
-          } else if (typeof item === 'object' && item !== null) {
-            // Handle medication objects
-            const parts = [];
-            if (item.name) parts.push(item.name);
-            if (item.dosage) parts.push(`(${item.dosage})`);
-            if (item.duration) parts.push(`for ${item.duration}`);
-            if (item.instructions) parts.push(`- ${item.instructions}`);
-            if (item.purpose) parts.push(`[${item.purpose}]`);
-            return `• ${parts.join(' ')}`;
-          }
-          return `• ${String(item)}`;
-        });
-        sections.push(`${name}\n${items.join('\n')}`);
-      }
+      const items = Array.isArray(data) ? data.map(item => {
+        if (typeof item === 'string') {
+          return `• ${item}`;
+        } else if (typeof item === 'object' && item !== null) {
+          // Handle medication objects
+          const parts = [];
+          if (item.name) parts.push(item.name);
+          if (item.dosage) parts.push(`(${item.dosage})`);
+          if (item.duration) parts.push(`for ${item.duration}`);
+          if (item.instructions) parts.push(`- ${item.instructions}`);
+          if (item.purpose) parts.push(`[${item.purpose}]`);
+          return `• ${parts.join(' ')}`;
+        }
+        return `• ${String(item)}`;
+      }) : [];
+      sections.push(`${name}\n${items.join('\n')}`);
     });
     
     const text = sections.join('\n\n');
@@ -448,10 +462,10 @@ export default function ClinicalNoteViewer({
   };
 
   const handlePatientDetailChange = (key: string, value: string) => {
-    if (editedValues?.patientDetails) {
+    if (editedValues) {
       setEditedValues({
         ...editedValues,
-        patientDetails: { ...editedValues.patientDetails, [key]: value }
+        patientDetails: { ...(editedValues.patientDetails || {}), [key]: value }
       });
     }
   };
@@ -542,184 +556,161 @@ export default function ClinicalNoteViewer({
               </Typography>
               
               {/* Patient Details */}
-              {editedValues.patientDetails && Object.keys(editedValues.patientDetails).length > 0 && (
-                <div>
-                  <Typography variant="h6" color="primary" className="mb-3">
-                    Patient Details
-                  </Typography>
-                  <div className="space-y-2">
-                    {[
-                      { key: 'name', label: 'Name' },
-                      { key: 'age', label: 'Age' },
-                      { key: 'gender', label: 'Gender' },
-                      { key: 'contact', label: 'Contact' }
-                    ].map(({ key, label }) => {
-                      const value = editedValues.patientDetails?.[key] || 
-                                   editedValues.patientDetails?.[key.charAt(0).toUpperCase() + key.slice(1)] ||
-                                   editedValues.patientDetails?.[key === 'name' ? 'Name' : key === 'age' ? 'Age' : key === 'gender' ? 'Gender' : key === 'contact' ? 'Contact' : ''];
-                      
-                      return (
-                        <div key={key} className="flex items-center gap-3">
-                          <Typography variant="body2" className="w-32 font-medium text-gray-700">
-                            {label} -
-                          </Typography>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            value={value || ''}
-                            onChange={(e) => handlePatientDetailChange(key, e.target.value)}
-                            variant="outlined"
-                            className="flex-1"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
+              <div>
+                <Typography variant="h6" color="primary" className="mb-3">
+                  Patient Details
+                </Typography>
+                <div className="space-y-2">
+                  {patientDetailFields.map(({ key, label }) => {
+                    const value = getPatientDetailValue(editedValues.patientDetails, key);
+                    
+                    return (
+                      <div key={key} className="flex items-center gap-3">
+                        <Typography variant="body2" className="w-32 font-medium text-gray-700">
+                          {label} -
+                        </Typography>
+                        <TextField
+                          fullWidth
+                          size="small"
+                          value={value}
+                          onChange={(e) => handlePatientDetailChange(key, e.target.value)}
+                          variant="outlined"
+                          className="flex-1"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              </div>
 
               {/* Medical History */}
-              {editedValues.medicalHistory && (
-                <div>
-                  <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                    Medical History -
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={3}
-                    value={Array.isArray(editedValues.medicalHistory) ? editedValues.medicalHistory.join('\n') : editedValues.medicalHistory}
-                    onChange={(e) => handleFieldChange('medicalHistory', e.target.value.split('\n').filter(Boolean))}
-                    variant="outlined"
-                    placeholder="Enter medical history (one item per line)"
-                  />
-                </div>
-              )}
+              <div>
+                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
+                  Medical History -
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  value={Array.isArray(editedValues.medicalHistory) ? editedValues.medicalHistory.join('\n') : editedValues.medicalHistory || ''}
+                  onChange={(e) => handleFieldChange('medicalHistory', e.target.value.split('\n').filter(Boolean))}
+                  variant="outlined"
+                  placeholder="Enter medical history (one item per line)"
+                />
+              </div>
 
               {/* Chief Complaint */}
-              {editedValues.problemFaced && (
-                <div>
-                  <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                    Chief Complaint -
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={2}
-                    value={Array.isArray(editedValues.problemFaced) ? editedValues.problemFaced.join('\n') : editedValues.problemFaced}
-                    onChange={(e) => handleFieldChange('problemFaced', e.target.value)}
-                    variant="outlined"
-                    placeholder="Enter chief complaint"
-                  />
-                </div>
-              )}
+              <div>
+                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
+                  Chief Complaint -
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={2}
+                  value={Array.isArray(editedValues.problemFaced) ? editedValues.problemFaced.join('\n') : editedValues.problemFaced || ''}
+                  onChange={(e) => handleFieldChange('problemFaced', e.target.value)}
+                  variant="outlined"
+                  placeholder="Enter chief complaint"
+                />
+              </div>
 
               {/* Findings */}
-              {editedValues.findings && (
-                <div>
-                  <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                    Findings -
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={3}
-                    value={Array.isArray(editedValues.findings) ? editedValues.findings.join('\n') : editedValues.findings}
-                    onChange={(e) => handleFieldChange('findings', e.target.value.split('\n').filter(Boolean))}
-                    variant="outlined"
-                    placeholder="Enter findings (one item per line)"
-                  />
-                </div>
-              )}
+              <div>
+                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
+                  Findings -
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  value={Array.isArray(editedValues.findings) ? editedValues.findings.join('\n') : renderNestedValue(editedValues.findings)}
+                  onChange={(e) => handleFieldChange('findings', e.target.value.split('\n').filter(Boolean))}
+                  variant="outlined"
+                  placeholder="Enter findings (one item per line)"
+                />
+              </div>
 
               {/* Diagnosis */}
-              {editedValues.diagnosis && (
-                <div>
-                  <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                    Diagnosis -
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={2}
-                    value={Array.isArray(editedValues.diagnosis) ? editedValues.diagnosis.join('\n') : editedValues.diagnosis}
-                    onChange={(e) => handleFieldChange('diagnosis', e.target.value.split('\n').filter(Boolean))}
-                    variant="outlined"
-                    placeholder="Enter diagnosis (one item per line)"
-                  />
-                </div>
-              )}
+              <div>
+                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
+                  Diagnosis -
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={2}
+                  value={Array.isArray(editedValues.diagnosis) ? editedValues.diagnosis.join('\n') : editedValues.diagnosis || ''}
+                  onChange={(e) => handleFieldChange('diagnosis', e.target.value.split('\n').filter(Boolean))}
+                  variant="outlined"
+                  placeholder="Enter diagnosis (one item per line)"
+                />
+              </div>
 
               {/* Investigations Advised */}
-              {editedValues.investigationsAdvised && (
-                <div>
-                  <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                    Investigations Advised -
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={2}
-                    value={Array.isArray(editedValues.investigationsAdvised) ? editedValues.investigationsAdvised.join('\n') : editedValues.investigationsAdvised}
-                    onChange={(e) => handleFieldChange('investigationsAdvised', e.target.value.split('\n').filter(Boolean))}
-                    variant="outlined"
-                    placeholder="Enter investigations (one item per line)"
-                  />
-                </div>
-              )}
+              <div>
+                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
+                  Investigations Advised -
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={2}
+                  value={Array.isArray(editedValues.investigationsAdvised) ? editedValues.investigationsAdvised.join('\n') : editedValues.investigationsAdvised || ''}
+                  onChange={(e) => handleFieldChange('investigationsAdvised', e.target.value.split('\n').filter(Boolean))}
+                  variant="outlined"
+                  placeholder="Enter investigations (one item per line)"
+                />
+              </div>
 
               {/* Doctor Instructions */}
-              {editedValues.doctorInstructions && (
-                <div>
-                  <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                    Doctor Instructions -
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={3}
-                    value={Array.isArray(editedValues.doctorInstructions) ? editedValues.doctorInstructions.join('\n') : editedValues.doctorInstructions}
-                    onChange={(e) => handleFieldChange('doctorInstructions', e.target.value.split('\n').filter(Boolean))}
-                    variant="outlined"
-                    placeholder="Enter instructions (one item per line)"
-                  />
-                </div>
-              )}
+              <div>
+                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
+                  Doctor Instructions -
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  value={Array.isArray(editedValues.doctorInstructions) ? editedValues.doctorInstructions.join('\n') : editedValues.doctorInstructions || ''}
+                  onChange={(e) => handleFieldChange('doctorInstructions', e.target.value.split('\n').filter(Boolean))}
+                  variant="outlined"
+                  placeholder="Enter instructions (one item per line)"
+                />
+              </div>
 
               {/* Medication Prescribed */}
-              {editedValues.medicationPrescribed && (
-                <div>
-                  <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                    Medication Prescribed -
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={3}
-                    value={Array.isArray(editedValues.medicationPrescribed) 
-                      ? editedValues.medicationPrescribed.map(med => 
-                          typeof med === 'string' 
-                            ? med 
-                            : typeof med === 'object' && med !== null
-                              ? (() => {
-                                  const parts = [];
-                                  if (med.name) parts.push(med.name);
-                                  if (med.dosage) parts.push(`(${med.dosage})`);
-                                  if (med.duration) parts.push(`for ${med.duration}`);
-                                  if (med.instructions) parts.push(`- ${med.instructions}`);
-                                  if (med.purpose) parts.push(`[${med.purpose}]`);
-                                  return parts.join(' ');
-                                })()
-                              : String(med)
-                        ).join('\n')
-                      : editedValues.medicationPrescribed
-                    }
-                    onChange={(e) => handleFieldChange('medicationPrescribed', e.target.value.split('\n').filter(Boolean))}
-                    variant="outlined"
-                    placeholder="Enter medications (one item per line)"
-                  />
-                </div>
-              )}
+              <div>
+                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
+                  Medication Prescribed -
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  value={Array.isArray(editedValues.medicationPrescribed) 
+                    ? editedValues.medicationPrescribed.map(med => 
+                        typeof med === 'string' 
+                          ? med 
+                          : typeof med === 'object' && med !== null
+                            ? (() => {
+                                const parts = [];
+                                if (med.name) parts.push(med.name);
+                                if (med.dosage) parts.push(`(${med.dosage})`);
+                                if (med.duration) parts.push(`for ${med.duration}`);
+                                if (med.instructions) parts.push(`- ${med.instructions}`);
+                                if (med.purpose) parts.push(`[${med.purpose}]`);
+                                return parts.join(' ');
+                              })()
+                            : String(med)
+                      ).join('\n')
+                    : editedValues.medicationPrescribed || ''
+                  }
+                  onChange={(e) => handleFieldChange('medicationPrescribed', e.target.value.split('\n').filter(Boolean))}
+                  variant="outlined"
+                  placeholder="Enter medications (one item per line)"
+                />
+              </div>
 
               {/* Edit Actions */}
               <div className="flex gap-3 mt-6 pt-4 border-t">
@@ -745,231 +736,79 @@ export default function ClinicalNoteViewer({
           ) : (
             <div className="space-y-4">
               {/* Patient Details */}
-              {parsed.patientDetails && Object.keys(parsed.patientDetails).length > 0 && (
-                <div>
-                  <Typography variant="h6" color="primary">
-                    Patient Details
-                  </Typography>
-                  <div className="grid grid-cols-1 gap-2 mt-2">
-                    {[
-                      { key: 'name', label: 'Name' },
-                      { key: 'age', label: 'Age' },
-                      { key: 'gender', label: 'Gender' },
-                      { key: 'contact', label: 'Contact' }
-                    ].map(({ key, label }) => {
-                      const value = parsed.patientDetails?.[key] || 
-                                   parsed.patientDetails?.[key.charAt(0).toUpperCase() + key.slice(1)] ||
-                                   parsed.patientDetails?.[key === 'name' ? 'Name' : key === 'age' ? 'Age' : key === 'gender' ? 'Gender' : key === 'contact' ? 'Contact' : ''];
-                      
-                      if (!value) return null;
-                      
-                      return (
-                        <div key={key} className="flex items-center">
-                          <Typography variant="subtitle2" color="textSecondary" className="w-24">
-                            {label} -
-                          </Typography>
-                          <Typography variant="body2">{value}</Typography>
-                        </div>
-                      );
-                    })}
-                  </div>
+              <div>
+                <Typography variant="h6" color="primary">
+                  Patient Details
+                </Typography>
+                <div className="grid grid-cols-1 gap-2 mt-2">
+                  {patientDetailFields.map(({ key, label }) => (
+                    <div key={key} className="flex items-center">
+                      <Typography variant="subtitle2" color="textSecondary" className="w-24">
+                        {label} -
+                      </Typography>
+                      <Typography variant="body2">
+                        {getPatientDetailValue(parsed.patientDetails, key) || '\u00a0'}
+                      </Typography>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
 
               {/* Medical History */}
-              {parsed.medicalHistory && parsed.medicalHistory.length > 0 && (
-                <div>
-                  <Typography variant="h6" color="primary">
-                    Medical History
-                  </Typography>
-                  <div className="mt-2">
-                    {parsed.medicalHistory.map((item, index) => (
-                      <Typography key={index} variant="body2" className="mb-1">
-                        • {item}
-                      </Typography>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div>
+                <Typography variant="h6" color="primary">
+                  Medical History
+                </Typography>
+                {renderArraySection(parsed.medicalHistory)}
+              </div>
 
               {/* Problem Faced */}
-              {parsed.problemFaced && 
-               (Array.isArray(parsed.problemFaced) ? parsed.problemFaced.length > 0 : parsed.problemFaced) && (
-                <div>
-                  <Typography variant="h6" color="primary">
-                    Chief Complaint
-                  </Typography>
-                  <Typography variant="body2" className="mt-2">
-                    {Array.isArray(parsed.problemFaced) 
-                      ? parsed.problemFaced.join(', ')
-                      : parsed.problemFaced
-                    }
-                  </Typography>
-                </div>
-              )}
+              <div>
+                <Typography variant="h6" color="primary">
+                  Chief Complaint
+                </Typography>
+                {renderFlexibleSection(parsed.problemFaced)}
+              </div>
 
               {/* Findings */}
-              {parsed.findings && 
-               (Array.isArray(parsed.findings) ? parsed.findings.length > 0 : parsed.findings) && (
-                <div>
-                  <Typography variant="h6" color="primary">
-                    Findings
-                  </Typography>
-                  <div className="mt-2">
-                    {Array.isArray(parsed.findings) 
-                      ? parsed.findings.map((finding, index) => (
-                          <Typography key={index} variant="body2" className="mb-1">
-                            • {finding}
-                          </Typography>
-                        ))
-                      : typeof parsed.findings === 'object' 
-                        ? Object.entries(parsed.findings).map(([key, value]) => (
-                            <Typography key={key} variant="body2" className="mb-1">
-                              • <strong>{key}:</strong> {renderNestedValue(value)}
-                            </Typography>
-                          ))
-                        : (
-                            <Typography variant="body2" className="mb-1">
-                              • {parsed.findings}
-                            </Typography>
-                        )
-                    }
-                  </div>
-                </div>
-              )}
+              <div>
+                <Typography variant="h6" color="primary">
+                  Findings
+                </Typography>
+                {renderFlexibleSection(parsed.findings)}
+              </div>
 
               {/* Diagnosis */}
-              {parsed.diagnosis && 
-               (Array.isArray(parsed.diagnosis) ? parsed.diagnosis.length > 0 : parsed.diagnosis) && (
-                <div>
-                  <Typography variant="h6" color="primary">
-                    Diagnosis
-                  </Typography>
-                  <div className="mt-2">
-                    {Array.isArray(parsed.diagnosis) 
-                      ? parsed.diagnosis.map((diagnosis, index) => (
-                          <Typography key={index} variant="body2" className="mb-1">
-                            • {diagnosis}
-                          </Typography>
-                        ))
-                      : typeof parsed.diagnosis === 'object' 
-                        ? Object.entries(parsed.diagnosis).map(([key, value]) => (
-                            <Typography key={key} variant="body2" className="mb-1">
-                              • <strong>{key}:</strong> {renderNestedValue(value)}
-                            </Typography>
-                          ))
-                        : (
-                            <Typography variant="body2" className="mb-1">
-                              • {parsed.diagnosis}
-                            </Typography>
-                        )
-                    }
-                  </div>
-                </div>
-              )}
+              <div>
+                <Typography variant="h6" color="primary">
+                  Diagnosis
+                </Typography>
+                {renderFlexibleSection(parsed.diagnosis)}
+              </div>
 
               {/* Investigations Advised */}
-              {parsed.investigationsAdvised && 
-               (Array.isArray(parsed.investigationsAdvised) ? parsed.investigationsAdvised.length > 0 : parsed.investigationsAdvised) && (
-                <div>
-                  <Typography variant="h6" color="primary">
-                    Investigations Advised
-                  </Typography>
-                  <div className="mt-2">
-                    {Array.isArray(parsed.investigationsAdvised) 
-                      ? parsed.investigationsAdvised.map((investigation, index) => (
-                          <Typography key={index} variant="body2" className="mb-1">
-                            • {investigation}
-                          </Typography>
-                        ))
-                      : typeof parsed.investigationsAdvised === 'object' 
-                        ? Object.entries(parsed.investigationsAdvised).map(([key, value]) => (
-                            <Typography key={key} variant="body2" className="mb-1">
-                              • <strong>{key}:</strong> {renderNestedValue(value)}
-                            </Typography>
-                          ))
-                        : (
-                            <Typography variant="body2" className="mb-1">
-                              • {parsed.investigationsAdvised}
-                            </Typography>
-                        )
-                    }
-                  </div>
-                </div>
-              )}
+              <div>
+                <Typography variant="h6" color="primary">
+                  Investigations Advised
+                </Typography>
+                {renderFlexibleSection(parsed.investigationsAdvised)}
+              </div>
 
               {/* Doctor Instructions */}
-              {parsed.doctorInstructions && 
-               (Array.isArray(parsed.doctorInstructions) ? parsed.doctorInstructions.length > 0 : parsed.doctorInstructions) && (
-                <div>
-                  <Typography variant="h6" color="primary">
-                    Doctor Instructions
-                  </Typography>
-                  <div className="mt-2">
-                    {Array.isArray(parsed.doctorInstructions) 
-                      ? parsed.doctorInstructions.map((instruction, index) => (
-                          <Typography key={index} variant="body2" className="mb-1">
-                            • {instruction}
-                          </Typography>
-                        ))
-                      : typeof parsed.doctorInstructions === 'object' 
-                        ? Object.entries(parsed.doctorInstructions).map(([key, value]) => (
-                            <Typography key={key} variant="body2" className="mb-1">
-                              • <strong>{key}:</strong> {renderNestedValue(value)}
-                            </Typography>
-                          ))
-                        : (
-                            <Typography variant="body2" className="mb-1">
-                              • {parsed.doctorInstructions}
-                            </Typography>
-                        )
-                    }
-                  </div>
-                </div>
-              )}
+              <div>
+                <Typography variant="h6" color="primary">
+                  Doctor Instructions
+                </Typography>
+                {renderFlexibleSection(parsed.doctorInstructions)}
+              </div>
 
               {/* Medication Prescribed */}
-              {parsed.medicationPrescribed && 
-               (Array.isArray(parsed.medicationPrescribed) ? parsed.medicationPrescribed.length > 0 : parsed.medicationPrescribed) && (
-                <div>
-                  <Typography variant="h6" color="primary">
-                    Medication Prescribed
-                  </Typography>
-                  <div className="mt-2">
-                    {Array.isArray(parsed.medicationPrescribed) 
-                      ? parsed.medicationPrescribed.map((medication, index) => (
-                          <Typography key={index} variant="body2" className="mb-1">
-                            {typeof medication === 'string' 
-                              ? `* ${medication}`
-                              : typeof medication === 'object' && medication !== null
-                                ? (() => {
-                                    const parts = [];
-                                    if (medication.name) parts.push(medication.name);
-                                    if (medication.dosage) parts.push(`(${medication.dosage})`);
-                                    if (medication.duration) parts.push(`for ${medication.duration}`);
-                                    if (medication.instructions) parts.push(`- ${medication.instructions}`);
-                                    if (medication.purpose) parts.push(`[${medication.purpose}]`);
-                                    return `* ${parts.join(' ')}`;
-                                  })()
-                                : `* ${medication}`
-                            }
-                          </Typography>
-                        ))
-                      : typeof parsed.medicationPrescribed === 'object' 
-                        ? Object.entries(parsed.medicationPrescribed).map(([key, value]) => (
-                            <Typography key={key} variant="body2" className="mb-1">
-                              <strong>{key}:</strong> {renderNestedValue(value)}
-                            </Typography>
-                          ))
-                        : (
-                            <Typography variant="body2" className="mb-1">
-                              {parsed.medicationPrescribed}
-                            </Typography>
-                        )
-                    }
-                  </div>
-                </div>
-              )}
+              <div>
+                <Typography variant="h6" color="primary">
+                  Medication Prescribed
+                </Typography>
+                {renderMedicationSection(parsed.medicationPrescribed)}
+              </div>
             </div>
           )}
         </CardContent>

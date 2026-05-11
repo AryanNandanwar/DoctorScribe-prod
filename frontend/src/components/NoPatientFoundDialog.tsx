@@ -15,9 +15,16 @@ import {
 
 type Initial = {
   fullName?: string;
+  name?: string;
+  Name?: string;
+  patientName?: string;
   age?: string | number;
+  Age?: string | number;
   phone?: string;
+  contact?: string;
+  Contact?: string;
   gender?: string;
+  Gender?: string;
   [k: string]: any;
 };
 
@@ -37,6 +44,18 @@ type Props = {
   description?: string;
 };
 
+const getInitialFullName = (value?: Initial | null) =>
+  String(value?.fullName ?? value?.name ?? value?.Name ?? value?.patientName ?? "");
+
+const getInitialAge = (value?: Initial | null) =>
+  value?.age ?? value?.Age ?? "";
+
+const getInitialPhone = (value?: Initial | null) =>
+  String(value?.phone ?? value?.contact ?? value?.Contact ?? "");
+
+const getInitialGender = (value?: Initial | null) =>
+  String(value?.gender ?? value?.Gender ?? "");
+
 export default function NoPatientFoundDialog({
   open,
   initial = null,
@@ -46,18 +65,18 @@ export default function NoPatientFoundDialog({
   title = "No patient found",
   description = "No existing patient matched the extracted details. Edit these details to create a new patient and attach the note.",
 }: Props) {
-  const [fullName, setFullName] = useState<string>(initial?.fullName ?? "");
-  const [age, setAge] = useState<string | number>(initial?.age ?? "");
-  const [phone, setPhone] = useState<string>(initial?.phone ?? "");
-  const [gender, setGender] = useState<string>(initial?.gender ?? "");
+  const [fullName, setFullName] = useState<string>(getInitialFullName(initial));
+  const [age, setAge] = useState<string | number>(getInitialAge(initial));
+  const [phone, setPhone] = useState<string>(getInitialPhone(initial));
+  const [gender, setGender] = useState<string>(getInitialGender(initial));
   const [errors, setErrors] = useState<{ fullName?: string; phone?: string }>({});
 
   useEffect(() => {
     if (open) {
-      setFullName(initial?.fullName ?? "");
-      setAge(initial?.age ?? "");
-      setPhone(initial?.phone ?? "");
-      setGender(initial?.gender ?? "");
+      setFullName(getInitialFullName(initial));
+      setAge(getInitialAge(initial));
+      setPhone(getInitialPhone(initial));
+      setGender(getInitialGender(initial));
       setErrors({});
     }
   }, [open, initial]);

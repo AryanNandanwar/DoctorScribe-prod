@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { supabaseService } from '../services/supabase-service';
+import { fetchExistingClinicalNote } from '../utils/clinical-note-polling';
 
 export interface UseClinicalNoteSubscriptionProps {
   noteId?: string;
@@ -80,9 +81,7 @@ export function useClinicalNoteSubscription({
     }
 
     try {
-      // Add a 5 second delay to allow for database commit
-      await new Promise(resolve => setTimeout(resolve, 7000));
-      const note = await supabaseService.fetchClinicalNote(id);
+      const note = await fetchExistingClinicalNote(id, (noteId) => supabaseService.fetchClinicalNote(noteId));
       
       // Mark note as received if successfully fetched
       if (note) {
@@ -129,7 +128,7 @@ export function useClinicalNoteSubscription({
         fetchNote(noteId).then(note => {
           if (note) {
             console.log(`📋 Initial fetch successful for note ${noteId}`);
-            // Note will be handled by the fetchNote function's success logic
+            onNoteGenerated?.(note);
           }
         }).catch(error => {
           console.error(`❌ Initial fetch failed for note ${noteId}:`, error);
@@ -149,7 +148,7 @@ export function useClinicalNoteSubscription({
     return () => {
       unsubscribe(); // This will clear both subscription and timeout
     };
-  }, [noteId, subscribe, unsubscribe, fetchNote]);
+  }, [noteId, subscribe, unsubscribe, fetchNote, onNoteGenerated]);
 
   return {
     subscribe,
