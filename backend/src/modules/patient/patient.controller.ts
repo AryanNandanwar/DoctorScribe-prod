@@ -11,7 +11,8 @@ import {
   Delete,
   Req,
   UseGuards,
-  HttpCode
+  HttpCode,
+  ForbiddenException
 } from '@nestjs/common';
 import { PatientService } from './patient.service';
 import { CreatePatientDto, MatchPatientDto, UpdatePatientDto } from './dto/patient.dto';
@@ -28,6 +29,7 @@ export class PatientController {
   // ---------------------------------------
   @Post()
   async createForDoctor(@Req() req: any, @Body() dto: CreatePatientDto) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.patientService.createForDoctor(doctorId, dto);
   }
@@ -38,6 +40,7 @@ export class PatientController {
   // ---------------------------------------
   @Get(':patientId')
   async getByIdForDoctor(@Req() req: any, @Param('patientId') patientId: string) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.patientService.findByIdForDoctor(doctorId, patientId);
   }
@@ -52,6 +55,7 @@ export class PatientController {
     @Query('limit') limit = '1000',
     @Query('q') q?: string,
   ) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     console.log('DEBUG doctorId from req.user:', doctorId);
     const n = parseInt(limit, 10) || 50;
@@ -75,6 +79,7 @@ export class PatientController {
     @Param('patientId') patientId: string,
     @Body() dto: UpdatePatientDto,
   ) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.patientService.updateForDoctor(doctorId, patientId, dto);
   }
@@ -85,6 +90,7 @@ export class PatientController {
   // ---------------------------------------
   @Delete(':patientId')
   async deleteForDoctor(@Req() req: any, @Param('patientId') patientId: string) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     await this.patientService.deleteForDoctor(doctorId, patientId);
     return { message: 'Patient deleted successfully' };
@@ -100,10 +106,17 @@ export class PatientController {
     @Req() req: any,
     @Body() dto: MatchPatientDto,
   ) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.patientService.findMatchesForDoctor(
       doctorId,
       dto,
     );
+  }
+
+  private ensureDoctor(req: any) {
+    if (req.user?.role !== 'doctor') {
+      throw new ForbiddenException('Only doctors can access patients');
+    }
   }
 }

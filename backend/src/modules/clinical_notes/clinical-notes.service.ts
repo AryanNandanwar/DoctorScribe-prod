@@ -29,9 +29,15 @@ export class ClinicalNotesService {
       throw new NotFoundException('Doctor not found');
     }
 
- 
+    const patient = dto.patientId
+      ? await this.patientRepo.findOne({ where: { id: dto.patientId, doctorId } })
+      : null;
+    if (dto.patientId && !patient) {
+      throw new NotFoundException('Patient not found for this doctor');
+    }
+
     const payload: Partial<ClinicalNote> = {
-      patientDetails: dto.patientDetails ? JSON.stringify(dto.patientDetails) : '{}',
+      patientDetails: JSON.stringify(this.resolvePatientDetails(dto.patientDetails, patient)),
       medicalHistory: dto.medicalHistory ? JSON.stringify(dto.medicalHistory) : '[]',
       problemsFaced: dto.problemFaced ? JSON.stringify(dto.problemFaced) : '[]',
       doctorInstructions: dto.doctorInstructions ? JSON.stringify(dto.doctorInstructions) : '[]',
@@ -40,6 +46,8 @@ export class ClinicalNotesService {
       diagnosis: dto.diagnosis ? JSON.stringify(dto.diagnosis) : '[]',
       investigationsAdvised: dto.investigationsAdvised ? JSON.stringify(dto.investigationsAdvised) : '[]',
       doctor: doctor,
+      patient: patient ?? undefined,
+      patientId: patient?.id ?? null,
       status: 'Draft',
     };  
 
@@ -55,9 +63,16 @@ export class ClinicalNotesService {
       throw new NotFoundException('Doctor not found');
     }
 
+    const patient = dto.patientId
+      ? await this.patientRepo.findOne({ where: { id: dto.patientId, doctorId } })
+      : null;
+    if (dto.patientId && !patient) {
+      throw new NotFoundException('Patient not found for this doctor');
+    }
+
     const payload: Partial<ClinicalNote> = {
       id: noteId, // Set the specific ID
-      patientDetails: dto.patientDetails ? JSON.stringify(dto.patientDetails) : '{}',
+      patientDetails: JSON.stringify(this.resolvePatientDetails(dto.patientDetails, patient)),
       medicalHistory: dto.medicalHistory ? JSON.stringify(dto.medicalHistory) : '[]',
       problemsFaced: dto.problemFaced ? JSON.stringify(dto.problemFaced) : '[]',
       doctorInstructions: dto.doctorInstructions ? JSON.stringify(dto.doctorInstructions) : '[]',
@@ -66,7 +81,8 @@ export class ClinicalNotesService {
       diagnosis: dto.diagnosis ? JSON.stringify(dto.diagnosis) : '[]',
       investigationsAdvised: dto.investigationsAdvised ? JSON.stringify(dto.investigationsAdvised) : '[]',
       doctor: doctor,
-      patientId: null, // Explicitly set to null - should work with proper FK constraint
+      patient: patient ?? undefined,
+      patientId: patient?.id ?? null,
       status: 'Draft',
     };
 
@@ -147,12 +163,13 @@ export class ClinicalNotesService {
     // Handle patient assignment
     if (dto.patientId !== undefined && dto.patientId) {
       // Assign patient to note
-      const patient = await this.patientRepo.findOne({ where: { id: dto.patientId } });
+      const patient = await this.patientRepo.findOne({ where: { id: dto.patientId, doctorId } });
       if (!patient) {
-        throw new NotFoundException('Patient not found');
+        throw new NotFoundException('Patient not found for this doctor');
       }
       note.patient = patient;
       note.patientId = dto.patientId;
+      note.patientDetails = JSON.stringify(this.resolvePatientDetails(dto.patientDetails, patient));
       console.log(`✅ Assigned patient ${dto.patientId} to clinical note ${id}`);
     }
 
@@ -227,5 +244,18 @@ export class ClinicalNotesService {
     }
   }
 
-}
+  private resolvePatientDetails(
+    generatedDetails: Record<string, string> | undefined,
+    patient: Patient | null,
+  ): Record<string, string> {
+    if (!patient) return generatedDetails ?? {};
 
+    return {
+      name: patient.fullName ?? '',
+      gender: patient.gender ?? '',
+      age: patient.age ?? '',
+      contact: patient.phone ?? '',
+    };
+  }
+
+}

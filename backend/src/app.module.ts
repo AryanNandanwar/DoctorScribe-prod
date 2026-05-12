@@ -9,6 +9,7 @@ import { ClinicalNotesModule } from './modules/clinical_notes/clinical-notes.mod
 import { PatientModule } from './modules/patient/patient.module';
 import { WebSocketModule } from './modules/websocket/websocket.module';
 import { SseModule } from './modules/sse/sse.module';
+import { IntakeModule } from './modules/intake/intake.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SseModule } from './modules/sse/sse.module';
     DoctorModule,    // needed if doctor-related routes / services exist
     ClinicalNotesModule, // <<< Clinical Notes Module
     PatientModule,      // <<< Patient Module
+    IntakeModule,
     WebSocketModule,    // <<< WebSocket Module for streaming
     SseModule,          // <<< SSE Module for final note notifications
   ],

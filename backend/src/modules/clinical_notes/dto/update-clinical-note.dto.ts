@@ -55,6 +55,8 @@ export class UpdateClinicalNoteDto {
       @IsString()
       status?: 'Draft' | 'Confirmed';
 
+      @IsOptional()
+      @IsString()
       patientId?: string;
 
 }

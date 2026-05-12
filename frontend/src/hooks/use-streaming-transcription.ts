@@ -16,6 +16,11 @@ export interface UseStreamingTranscriptionOptions {
   onSessionEnd?: () => void;
 }
 
+export interface StopRecordingOptions {
+  patientId?: string;
+  intakeId?: string;
+}
+
 export const useStreamingTranscription = ({
   websocketUrl,
   onError,
@@ -179,7 +184,7 @@ export const useStreamingTranscription = ({
     }
   }, []);
 
-  const stopRecording = useCallback((noteId?: string, doctorId?: string) => {
+  const stopRecording = useCallback((noteId?: string, doctorId?: string, options: StopRecordingOptions = {}) => {
     console.log("🛑 Stopping recording...");
     console.log("📨 WebSocket status before stop:", wsRef.current?.isConnected());
     
@@ -191,7 +196,7 @@ export const useStreamingTranscription = ({
     if (wsRef.current && sessionIdRef.current) {
       console.log("📡 Sending stop_recording message to server...");
       console.log("🆔 Session ID being stopped:", sessionIdRef.current);
-      console.log("📋 Additional parameters:", { noteId, doctorId });
+      console.log("📋 Additional parameters:", { noteId, doctorId, ...options });
       
       if (!doctorId) {
         console.error("❌ Doctor ID is required for new clinical note flow");
@@ -203,7 +208,7 @@ export const useStreamingTranscription = ({
       }
       
       console.log("🔍 About to call stopRecording with noteId:", noteId);
-      const finalNoteId = wsRef.current.stopRecording(sessionIdRef.current, doctorId, noteId);
+      const finalNoteId = wsRef.current.stopRecording(sessionIdRef.current, doctorId, noteId, options);
       console.log("🆔 Final note ID:", finalNoteId);
       
       // Store the final note ID for tracking

@@ -15,7 +15,7 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import api from "../lib/api"; 
 import { useNavigate } from "react-router-dom";
 
-// DoctorScribe Fullscreen Login Page (React + TypeScript + Tailwind + MUI)
+// EchoAide Fullscreen Login Page (React + TypeScript + Tailwind + MUI)
 // Updated to call backend, show server errors & support "remember me".
 
 type Props = {
@@ -75,7 +75,11 @@ export default function Login({ onSubmit }: Props) {
 
       // call parent handler if provided
       onSubmit?.(data);
-      navigate("/", { replace: true }); 
+      if (data?.user?.role === "receptionist") {
+        navigate("/receptionist/intake", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
 
     } catch (err: any) {
       // axios-style error handling
@@ -113,7 +117,7 @@ export default function Login({ onSubmit }: Props) {
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">DoctorScribe</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">EchoAide</h1>
             <p className="text-sm text-slate-500">Secure medical notes & transcription</p>
           </div>
         </div>
@@ -207,7 +211,7 @@ export default function Login({ onSubmit }: Props) {
         <div className="relative z-10 px-10 text-center text-white">
           <h3 className="text-3xl font-semibold mb-4">Secure by design</h3>
           <p className="text-base text-slate-100 max-w-md mx-auto">
-            DoctorScribe encrypts patient data, supports HIPAA-compliant workflows,
+            EchoAide encrypts patient data, supports HIPAA-compliant workflows,
             and provides a secure transcription environment for clinicians.
           </p>
           <div className="mt-10">

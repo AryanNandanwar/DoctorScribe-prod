@@ -1,7 +1,9 @@
-import { Controller, Post, Body, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Body, Controller, ForbiddenException, Post, Req, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { CreateReceptionistDto } from './dto/create-receptionist.dto';
+import { AuthGuard } from '@nestjs/passport';
 
 @Controller('auth')
 export class AuthController {
@@ -99,5 +101,16 @@ export class AuthController {
   @Post('logout')
   async logout() {
     return this.authService.loogout();
+  }
+
+  @Post('receptionists')
+  @UseGuards(AuthGuard('jwt'))
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async createReceptionist(@Req() req: any, @Body() dto: CreateReceptionistDto) {
+    if (req.user.role !== 'doctor') {
+      throw new ForbiddenException('Only doctors can create receptionist accounts');
+    }
+
+    return this.authService.createReceptionist(req.user.id, dto);
   }
 }

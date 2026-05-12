@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -28,18 +29,21 @@ export class ClinicalNotesController {
 
   @Post()
   async create(@Req() req: any, @Body() dto: CreateClinicalNoteDto) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id; // <-- depends on your JWT payload
     return this.clinicalNotesService.create(dto, doctorId);
   }
 
   @Get()
   async findAll(@Req() req: any) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.clinicalNotesService.findAllForDoctor(doctorId);
   }
 
   @Get(':id')
   async findOne(@Req() req: any, @Param('id') id: string) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.clinicalNotesService.findOneForDoctor(doctorId, id);
   }
@@ -50,6 +54,7 @@ export class ClinicalNotesController {
     @Param('id') id: string,
     @Body() dto: UpdateClinicalNoteDto,
   ) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.clinicalNotesService.updateForDoctor(id, dto, doctorId);
   }
@@ -59,6 +64,7 @@ export class ClinicalNotesController {
     @Req() req: any,
     @Param('id') id: string,
   ) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     await this.clinicalNotesService.delete(id, doctorId);
     return { message: 'Clinical note deleted successfully' };
@@ -71,6 +77,7 @@ export class ClinicalNotesController {
     @Res() res: Response,
   ) {
     try {
+      this.ensureDoctor(req);
       const doctorId = req.user.id;
       console.log(`Generating PDF for clinical note ${id} for doctor ${doctorId}`);
       
@@ -97,6 +104,7 @@ export class ClinicalNotesController {
     @Req() req: any,
     @Param('patientId') patientId: string,
   ) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.clinicalNotesService.getNotesCountForPatient(doctorId, patientId);
   }
@@ -106,7 +114,14 @@ export class ClinicalNotesController {
     @Req() req: any,
     @Param('patientId') patientId: string,
   ) {
+    this.ensureDoctor(req);
     const doctorId = req.user.id;
     return this.clinicalNotesService.getNotesSummaryForPatient(doctorId, patientId);
+  }
+
+  private ensureDoctor(req: any) {
+    if (req.user?.role !== 'doctor') {
+      throw new ForbiddenException('Only doctors can access clinical notes');
+    }
   }
 }

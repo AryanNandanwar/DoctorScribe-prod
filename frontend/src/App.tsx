@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 // import Register from "./pages/Register";
 import PatientsPage from "./pages/Patients";
 import NotesPage from "./pages/Notes";
+import ReceptionistIntakePage from "./pages/ReceptionistIntake";
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/patients" element={<PatientsPage />} />
         {/* clinical notes page */}
         <Route path="/notes" element={<NotesPage />} />
+        <Route path="/receptionist/intake" element={<ReceptionistIntakePage />} />
 
         {/* example: redirect unknown paths to home */}
         <Route path="*" element={<Navigate to="/" replace />} />

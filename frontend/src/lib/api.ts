@@ -13,7 +13,7 @@ export const api = axios.create({
 // Add ds_token to every request EXCEPT login/signup
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("ds_token");
+    const token = localStorage.getItem("ds_token") ?? sessionStorage.getItem("ds_token");
 
     // Define routes that should NOT include the token
     const skipAuth =

@@ -1,13 +1,81 @@
 // pages/HomePage.tsx
-import  { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, Button, Card, CardContent, Chip, CircularProgress, Typography } from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import ResponsiveAppBar from "../components/navbar.tsx";
 import AudioRecorder from "../components/transcribeBar.tsx";
 import ClinicalNoteViewer from "../components/ClinicalNoteViewer.tsx";
+import api from "../lib/api.ts";
+
+type IntakeCard = {
+  id: string;
+  patientId: string;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  createdAt: string;
+  patient: {
+    id: string;
+    fullName: string;
+    gender?: string;
+    age?: string;
+    phone?: string;
+  };
+};
 
 export default function HomePage() {
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
   const [isGeneratingNote, setIsGeneratingNote] = useState(false);
   const [isNoteReady, setIsNoteReady] = useState(false);
+  const [queue, setQueue] = useState<IntakeCard[]>([]);
+  const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [activeIntakeId, setActiveIntakeId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    const raw = localStorage.getItem("ds_user") ?? sessionStorage.getItem("ds_user");
+    if (!raw) {
+      setUserRole(null);
+      return;
+    }
+
+    try {
+      const user = JSON.parse(raw);
+      setUserRole(user.role ?? "doctor");
+    } catch {
+      setUserRole(null);
+    }
+  }, []);
+
+  const fetchQueue = useCallback(async () => {
+    const raw = localStorage.getItem("ds_user") ?? sessionStorage.getItem("ds_user");
+    if (!raw) return;
+
+    try {
+      const user = JSON.parse(raw);
+      if (user.role === "receptionist") return;
+    } catch {
+      return;
+    }
+
+    setQueueLoading(true);
+    setQueueError(null);
+    try {
+      const response = await api.get("/api/intake/queue?status=pending");
+      setQueue(response.data);
+    } catch (error: any) {
+      if (error?.response?.status !== 401 && error?.response?.status !== 403) {
+        setQueueError(error?.response?.data?.message || "Failed to load intake queue.");
+      }
+    } finally {
+      setQueueLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchQueue();
+    const intervalId = window.setInterval(fetchQueue, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchQueue]);
 
   // Handle note ID generation from AudioRecorder
   const handleNoteIdGenerated = (noteId: string) => {
@@ -32,6 +100,8 @@ export default function HomePage() {
     console.log("Note saved successfully");
     setIsNoteReady(true);
     setIsGeneratingNote(false);
+    setActiveIntakeId(null);
+    fetchQueue();
   };
 
   // Handle note discarded callback
@@ -40,6 +110,16 @@ export default function HomePage() {
     setCurrentNoteId(null);
     setIsNoteReady(false);
     setIsGeneratingNote(false);
+    setActiveIntakeId(null);
+  };
+
+  const cancelIntake = async (intakeId: string) => {
+    try {
+      await api.patch(`/api/intake/${intakeId}/status`, { status: "cancelled" });
+      fetchQueue();
+    } catch (error) {
+      console.error("Failed to cancel intake:", error);
+    }
   };
 
   return (
@@ -60,6 +140,107 @@ export default function HomePage() {
             </p>
           </div>
 
+          {userRole !== "receptionist" && (
+            <section className="px-4 md:px-8 max-w-5xl mx-auto mb-8 w-full">
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <Typography variant="h6" className="font-semibold text-slate-800">
+                  Waiting Queue
+                </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={queueLoading ? <CircularProgress size={14} /> : <RefreshIcon />}
+                  onClick={fetchQueue}
+                  disabled={queueLoading}
+                  sx={{ textTransform: "none" }}
+                >
+                  Refresh
+                </Button>
+              </div>
+
+              {queueError && <Alert severity="error" className="mb-3">{queueError}</Alert>}
+
+              {queue.length === 0 ? (
+                <Card className="border shadow-sm">
+                  <CardContent>
+                    <Typography variant="body2" color="text.secondary">
+                      No patients waiting.
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {queue.map((intake) => {
+                    const patient = intake.patient;
+                    const isActive = activeIntakeId === intake.id;
+
+                    return (
+                      <Card key={intake.id} className="border shadow-sm">
+                        <CardContent>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <Typography variant="h6" className="text-slate-900">
+                                {patient.fullName}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Added {new Date(intake.createdAt).toLocaleTimeString()}
+                              </Typography>
+                            </div>
+                            <Chip size="small" color={isActive ? "warning" : "default"} label={isActive ? "Recording" : "Pending"} />
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {patient.gender && <Chip size="small" label={`Gender: ${patient.gender}`} />}
+                            {patient.age && <Chip size="small" label={`Age: ${patient.age}`} />}
+                            {patient.phone && <Chip size="small" label={`Contact: ${patient.phone}`} />}
+                          </div>
+
+                          <div className="mt-4">
+                            {isActive ? (
+                              <AudioRecorder
+                                variant="inline"
+                                patientId={patient.id}
+                                intakeId={intake.id}
+                                isGeneratingNote={isGeneratingNote}
+                                isNoteReady={isNoteReady}
+                                onSessionStart={handleSessionStart}
+                                onSessionEnd={handleSessionEnd}
+                                onNoteSaved={handleNoteSaved}
+                                onNoteIdGenerated={handleNoteIdGenerated}
+                              />
+                            ) : (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="contained"
+                                  size="small"
+                                  onClick={() => setActiveIntakeId(intake.id)}
+                                  disabled={Boolean(activeIntakeId)}
+                                  sx={{ textTransform: "none" }}
+                                >
+                                  Record
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  color="error"
+                                  size="small"
+                                  onClick={() => cancelIntake(intake.id)}
+                                  disabled={Boolean(activeIntakeId)}
+                                  sx={{ textTransform: "none" }}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Clinical Note Display - using new Supabase flow */}
           {currentNoteId && (
             <div className="px-4 md:px-8 max-w-3xl mx-auto">
@@ -75,14 +256,16 @@ export default function HomePage() {
       </main>
 
       {/* Fixed Audio Recorder Bar */}
-      <AudioRecorder
-        isGeneratingNote={isGeneratingNote}
-        isNoteReady={isNoteReady}
-        onSessionStart={handleSessionStart}
-        onSessionEnd={handleSessionEnd}
-        onNoteSaved={handleNoteSaved}
-        onNoteIdGenerated={handleNoteIdGenerated}
-      />
+      {userRole !== "receptionist" && (
+        <AudioRecorder
+          isGeneratingNote={isGeneratingNote}
+          isNoteReady={isNoteReady}
+          onSessionStart={handleSessionStart}
+          onSessionEnd={handleSessionEnd}
+          onNoteSaved={handleNoteSaved}
+          onNoteIdGenerated={handleNoteIdGenerated}
+        />
+      )}
     </div>
   );
 }

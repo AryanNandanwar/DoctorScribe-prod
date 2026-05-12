@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { doctorProviders } from '../doctor/doctor.providers';
+import { receptionistProviders } from '../receptionist/receptionist.providers';
 import { DatabaseModule } from '../../db/database.module';
 
 @Module({
@@ -46,7 +47,7 @@ import { DatabaseModule } from '../../db/database.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [...doctorProviders, AuthService, JwtStrategy],
+  providers: [...doctorProviders, ...receptionistProviders, AuthService, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

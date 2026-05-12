@@ -24,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   // Optionally type payload for clarity
-  async validate(payload: { sub: string; email: string; name?: string; role?: string }) {
+  async validate(payload: { sub: string; email: string; name?: string; role?: string; doctorId?: string }) {
     // You can perform additional checks here e.g. check user still exists
     // If you want to refuse tokens return false or throw UnauthorizedException
     if (!payload || !payload.sub) {
@@ -36,7 +36,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: payload.sub,
       email: payload.email,
       name: payload.name,
-      role: payload.role,
+      role: payload.role ?? 'doctor',
+      doctorId: payload.doctorId,
     };
   }
 }

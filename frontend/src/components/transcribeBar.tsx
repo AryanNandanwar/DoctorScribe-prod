@@ -26,6 +26,9 @@ interface AudioRecorderProps {
   onNoteIdGenerated?: (noteId: string) => void; // New callback for noteId
   websocketUrl?: string;
   patientId?: string;
+  intakeId?: string;
+  variant?: "bar" | "inline";
+  className?: string;
 }
 
 export const AudioRecorder: React.FC<AudioRecorderProps> = ({
@@ -36,6 +39,10 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   onSessionEnd,
   onNoteIdGenerated,
   websocketUrl = 'http://localhost:3000',
+  patientId,
+  intakeId,
+  variant = "bar",
+  className,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [wakeLock, setWakeLock] = useState<any>(null);
@@ -147,7 +154,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         doctorId
       });
 
-      await stopRecording(noteId, doctorId);
+      await stopRecording(noteId, doctorId, { patientId, intakeId });
       releaseWakeLock();
       // Note: Final note processing is now handled by backend storage
     } catch (error) {
@@ -348,8 +355,12 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
   };
 
+  const containerClassName = variant === "bar"
+    ? "fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 shadow-lg p-4 z-50"
+    : `bg-white border border-gray-200 rounded-lg p-3 ${className ?? ""}`;
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 shadow-lg p-4 z-50">
+    <div className={containerClassName}>
       <div className="max-w-2xl mx-auto">
         {/* Connection Status */}
         <div className="mb-4 flex items-center justify-between">

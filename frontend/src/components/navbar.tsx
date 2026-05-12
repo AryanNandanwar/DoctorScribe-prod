@@ -25,6 +25,7 @@ function ResponsiveAppBar() {
   const [anchorElNav, setAnchorElNav] = React.useState<null | HTMLElement>(null);
   const [anchorElUser, setAnchorElUser] = React.useState<null | HTMLElement>(null);
   const [userName, setUserName] = React.useState<string | null>(null);
+  const [userRole, setUserRole] = React.useState<string | null>(null);
 
   const navigate = useNavigate();
 
@@ -37,11 +38,14 @@ function ResponsiveAppBar() {
       if (raw) {
         const u = JSON.parse(raw);
         setUserName(u?.fullName ?? u?.name ?? u?.email ?? String(u));
+        setUserRole(u?.role ?? 'doctor');
       } else {
         setUserName(null);
+        setUserRole(null);
       }
     } catch {
       setUserName(null);
+      setUserRole(null);
     }
   }, []);
 
@@ -90,13 +94,16 @@ function ResponsiveAppBar() {
     localStorage.removeItem('user');
     localStorage.removeItem('accessToken');
     localStorage.removeItem('ds_user');
+    localStorage.removeItem('ds_token');
 
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('accessToken');
     sessionStorage.removeItem('ds_user');
+    sessionStorage.removeItem('ds_token');
 
     setUserName(null);
+    setUserRole(null);
     handleCloseUserMenu();
     navigate('/login', { replace: true });
   };
@@ -152,7 +159,7 @@ function ResponsiveAppBar() {
               onClose={handleCloseNavMenu}
               sx={{ display: { xs: 'block', md: 'none' } }}
             >
-              {pages.map((page) => (
+              {(userRole === 'receptionist' ? [{ label: 'Intake', path: '/receptionist/intake' }] : pages).map((page) => (
                 <MenuItem
                   key={page.path}
                   onClick={() => {
@@ -196,7 +203,7 @@ function ResponsiveAppBar() {
               transform: 'translateX(-50%)',
             }}
           >
-            {pages.map((page) => (
+            {(userRole === 'receptionist' ? [{ label: 'Intake', path: '/receptionist/intake' }] : pages).map((page) => (
               <Button
                 key={page.path}
                 onClick={() => navigate(page.path)}

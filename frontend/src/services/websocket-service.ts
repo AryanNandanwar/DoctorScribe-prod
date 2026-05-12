@@ -17,6 +17,11 @@ export interface NoteUpdateData {
   timestamp: number;
 }
 
+export interface StopRecordingOptions {
+  patientId?: string;
+  intakeId?: string;
+}
+
 export class SocketIOService {
   private socket: Socket | null = null;
   private url: string;
@@ -153,7 +158,7 @@ export class SocketIOService {
     this.sendMessage('start_recording', { sessionId });
   }
 
-  stopRecording(sessionId: string, doctorId: string, noteId?: string) {
+  stopRecording(sessionId: string, doctorId: string, noteId?: string, options: StopRecordingOptions = {}) {
     // Debug: Log the raw parameters received
     console.log("🛑 WebSocket: stopRecording raw parameters:", { sessionId, doctorId, noteId });
     
@@ -164,11 +169,15 @@ export class SocketIOService {
       doctorId,
       wasNoteIdProvided: !!noteId
     });
-    this.sendMessage('stop_recording', { 
+    const payload = {
       sessionId, 
       noteId: finalNoteId, 
-      doctorId 
-    });
+      doctorId,
+      ...(options.patientId && { patientId: options.patientId }),
+      ...(options.intakeId && { intakeId: options.intakeId }),
+    };
+
+    this.sendMessage('stop_recording', payload);
     return finalNoteId; // Return the noteId for frontend to track
   }
 

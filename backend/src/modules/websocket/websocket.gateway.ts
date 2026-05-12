@@ -82,14 +82,32 @@ export class StreamingWebSocketGateway implements OnGatewayInit, OnGatewayConnec
 
   @SubscribeMessage('stop_recording')
   async handleStopRecording(
-    @MessageBody() data: { sessionId: string; noteId?: string; doctorId?: string },
+    @MessageBody() data: {
+      sessionId: string;
+      noteId?: string;
+      doctorId?: string;
+      patientId?: string;
+      intakeId?: string;
+    },
     @ConnectedSocket() client: Socket,
   ) {
     try {
       this.logger.log(`Stopping recording session: ${data.sessionId} for client: ${client.id}`);
-      this.logger.log(`Additional data:`, { noteId: data.noteId, doctorId: data.doctorId });
+      this.logger.log(`Additional data:`, {
+        noteId: data.noteId,
+        doctorId: data.doctorId,
+        patientId: data.patientId,
+        intakeId: data.intakeId,
+      });
       
-      const result = await this.streamingService.stopRecording(client.id, data.sessionId, data.noteId || '', data.doctorId);
+      const result = await this.streamingService.stopRecording(
+        client.id,
+        data.sessionId,
+        data.noteId || '',
+        data.doctorId,
+        data.patientId,
+        data.intakeId,
+      );
       this.logger.log(`Recording stopped successfully for session: ${data.sessionId}`);
       this.logger.log(`Clinical note stored in backend...`);
       

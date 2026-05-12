@@ -3,6 +3,7 @@ import { SonioxClientService } from './soniox-client.service';
 import { IncrementalNoteService } from './incremental-note.service';
 import { ClinicalNotesService } from '../clinical_notes/clinical-notes.service';
 import { CreateClinicalNoteDto } from '../clinical_notes/dto/clinical-note.dto';
+import { IntakeService } from '../intake/intake.service';
 
 export interface StreamingSession {
   clientId: string;
@@ -21,6 +22,7 @@ export class StreamingService {
     private readonly sonioxClient: SonioxClientService,
     private readonly incrementalNoteService: IncrementalNoteService,
     private readonly clinicalNotesService: ClinicalNotesService,
+    private readonly intakeService: IntakeService,
   ) {}
 
   async startRecording(clientId: string, sessionId: string): Promise<void> {
@@ -49,7 +51,14 @@ export class StreamingService {
     }
   }
 
-  async stopRecording(clientId: string, sessionId: string, noteId: string, doctorId?: string): Promise<void> {
+  async stopRecording(
+    clientId: string,
+    sessionId: string,
+    noteId: string,
+    doctorId?: string,
+    patientId?: string,
+    intakeId?: string,
+  ): Promise<void> {
     this.logger.log(`Stopping recording session ${sessionId} for client ${clientId} with noteId: ${noteId}`);
 
     const session = this.sessions.get(sessionId);
@@ -97,7 +106,10 @@ export class StreamingService {
         
         // Convert ParsedNote to CreateClinicalNoteDto and store in backend
         this.logger.log(`Storing clinical note in backend for session ${sessionId} with noteId: ${noteId}`);
-        await this.storeClinicalNote(finalNote, doctorId, noteId);
+        await this.storeClinicalNote(finalNote, doctorId, noteId, patientId);
+        if (intakeId) {
+          await this.intakeService.completeForDoctor(doctorId, intakeId);
+        }
       } catch (error) {
         this.logger.error(`Failed to generate and store final note: ${error.message}`);
       }
@@ -223,7 +235,12 @@ export class StreamingService {
     return session?.clientId || null;
   }
 
-  private async storeClinicalNote(finalNote: any, doctorId: string, noteId: string): Promise<void> {
+  private async storeClinicalNote(
+    finalNote: any,
+    doctorId: string,
+    noteId: string,
+    patientId?: string,
+  ): Promise<void> {
     try {
       // Convert ParsedNote to CreateClinicalNoteDto format
       const createDto: CreateClinicalNoteDto = {
@@ -237,6 +254,7 @@ export class StreamingService {
         doctorInstructions: this.ensureArray(finalNote.doctorInstructions),
         medicationPrescribed: this.ensureArray(finalNote.medicationPrescribed),
         status: 'Draft',
+        patientId,
       };
 
       console.log(`🔍 About to store clinical note for doctor ${doctorId} with noteId: ${noteId}`);
