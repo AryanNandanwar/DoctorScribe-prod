@@ -3,7 +3,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fetchExistingClinicalNote } from "./clinical-note-polling.ts";
-import { mapClinicalNoteRecordToParsedNote } from "./clinical-note-record.ts";
+import {
+  mapClinicalNoteRecordToParsedNote,
+  mergePatientDetails,
+  parsePatientDetails,
+} from "./clinical-note-record.ts";
 
 test("fetchExistingClinicalNote polls by noteId and returns an existing database row", async () => {
   const calls: string[] = [];
@@ -56,4 +60,31 @@ test("database clinical note row maps to the parsed shape displayed by ClinicalN
   assert.deepEqual(parsed.investigationsAdvised, ["CBC", "ECG"]);
   assert.deepEqual(parsed.doctorInstructions, ["Follow up in 1 week"]);
   assert.deepEqual(parsed.medicationPrescribed, ["Amlodipine 5mg"]);
+});
+
+test("parsePatientDetails reads JSON stored in patient_details column", () => {
+  const parsed = parsePatientDetails(
+    JSON.stringify({ name: "Asha Rao", age: "41", gender: "Female", contact: "9876543210" }),
+  );
+
+  assert.deepEqual(parsed, {
+    name: "Asha Rao",
+    age: "41",
+    gender: "Female",
+    contact: "9876543210",
+  });
+});
+
+test("mergePatientDetails prefers patient card values when provided", () => {
+  const merged = mergePatientDetails(
+    { name: "Unknown" },
+    { name: "Asha Rao", age: "41", gender: "Female", contact: "9876543210" },
+  );
+
+  assert.deepEqual(merged, {
+    name: "Asha Rao",
+    age: "41",
+    gender: "Female",
+    contact: "9876543210",
+  });
 });

@@ -58,6 +58,7 @@ export class StreamingService {
     doctorId?: string,
     patientId?: string,
     intakeId?: string,
+    patientDetails?: Record<string, string>,
   ): Promise<void> {
     this.logger.log(`Stopping recording session ${sessionId} for client ${clientId} with noteId: ${noteId}`);
 
@@ -106,7 +107,7 @@ export class StreamingService {
         
         // Convert ParsedNote to CreateClinicalNoteDto and store in backend
         this.logger.log(`Storing clinical note in backend for session ${sessionId} with noteId: ${noteId}`);
-        await this.storeClinicalNote(finalNote, doctorId, noteId, patientId);
+        await this.storeClinicalNote(finalNote, doctorId, noteId, patientId, patientDetails);
         if (intakeId) {
           await this.intakeService.completeForDoctor(doctorId, intakeId);
         }
@@ -240,12 +241,18 @@ export class StreamingService {
     doctorId: string,
     noteId: string,
     patientId?: string,
+    cardPatientDetails?: Record<string, string>,
   ): Promise<void> {
     try {
+      const mergedPatientDetails = {
+        ...(finalNote.patientDetails || {}),
+        ...(cardPatientDetails || {}),
+      };
+
       // Convert ParsedNote to CreateClinicalNoteDto format
       const createDto: CreateClinicalNoteDto = {
 
-        patientDetails: finalNote.patientDetails || {},
+        patientDetails: mergedPatientDetails,
         medicalHistory: this.ensureArray(finalNote.medicalHistory),
         problemFaced: this.ensureArray(finalNote.problemFaced),
         findings: this.ensureArray(finalNote.findings),

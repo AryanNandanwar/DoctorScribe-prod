@@ -11,17 +11,62 @@ export type ClinicalNoteRecord = {
   medication_prescribed?: unknown;
 };
 
+function normalizePatientDetailKeys(details: Record<string, unknown>): Record<string, string> {
+  const normalized: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(details)) {
+    if (value === null || value === undefined) continue;
+    const lowerKey = key.toLowerCase();
+    if (lowerKey === "fullname" || lowerKey === "patientname") {
+      normalized.name = String(value).trim();
+    } else {
+      normalized[lowerKey] = String(value).trim();
+    }
+  }
+
+  return normalized;
+}
+
+export function mergePatientDetails(
+  fromNote: Record<string, string> | undefined,
+  fromCard: Record<string, string> | undefined,
+): Record<string, string> {
+  const merged: Record<string, string> = { ...(fromNote ?? {}) };
+
+  for (const [key, value] of Object.entries(fromCard ?? {})) {
+    if (value.trim()) {
+      merged[key] = value;
+    }
+  }
+
+  return merged;
+}
+
 export function parsePatientDetails(patientDetails: unknown): Record<string, string> {
   if (typeof patientDetails === "object" && patientDetails !== null && !Array.isArray(patientDetails)) {
-    return patientDetails as Record<string, string>;
+    return normalizePatientDetailKeys(patientDetails as Record<string, unknown>);
   }
 
   if (typeof patientDetails === "string") {
+    const trimmed = patientDetails.trim();
+    if (!trimmed) return {};
+
+    if (trimmed.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          return normalizePatientDetailKeys(parsed as Record<string, unknown>);
+        }
+      } catch {
+        // Fall through to legacy "Name: …" parsing.
+      }
+    }
+
     const details: Record<string, string> = {};
-    const parts = patientDetails.split(",").map((part) => part.trim());
+    const parts = trimmed.split(",").map((part) => part.trim());
 
     parts.forEach((part) => {
-      const match = part.match(/^(Name|Age|Gender|Contact):\s*(.+)$/);
+      const match = part.match(/^(Name|Age|Gender|Contact):\s*(.+)$/i);
       if (match) {
         const [, key, value] = match;
         details[key.toLowerCase()] = value.trim();

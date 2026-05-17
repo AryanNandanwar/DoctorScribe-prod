@@ -248,13 +248,15 @@ export class ClinicalNotesService {
     generatedDetails: Record<string, string> | undefined,
     patient: Patient | null,
   ): Record<string, string> {
-    if (!patient) return generatedDetails ?? {};
+    const generated = generatedDetails ?? {};
+    if (!patient) return generated;
 
     return {
-      name: patient.fullName ?? '',
-      gender: patient.gender ?? '',
-      age: patient.age ?? '',
-      contact: patient.phone ?? '',
+      ...generated,
+      name: patient.fullName ?? generated.name ?? '',
+      gender: patient.gender ?? generated.gender ?? '',
+      age: patient.age ?? generated.age ?? '',
+      contact: patient.phone ?? generated.contact ?? '',
     };
   }
 

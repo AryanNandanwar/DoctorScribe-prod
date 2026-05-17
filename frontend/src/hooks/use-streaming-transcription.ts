@@ -19,6 +19,7 @@ export interface UseStreamingTranscriptionOptions {
 export interface StopRecordingOptions {
   patientId?: string;
   intakeId?: string;
+  patientDetails?: Record<string, string>;
 }
 
 export const useStreamingTranscription = ({

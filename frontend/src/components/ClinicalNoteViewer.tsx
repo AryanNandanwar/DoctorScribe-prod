@@ -7,10 +7,10 @@ import {
   CircularProgress,
   TextField,
 } from "@mui/material";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import SaveIcon from "@mui/icons-material/Save";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import PrintIcon from "@mui/icons-material/Print";
 import api from "../lib/api";
 import SnackbarToast from "./SnackbarToast";
 import ConfirmDialog from "./ConfirmDialog";
@@ -19,9 +19,11 @@ import { type ParsedNote } from "../types/clinical-note";
 import { useClinicalNoteSubscription } from "../hooks/use-clinical-note-subscription";
 import {
   mapClinicalNoteRecordToParsedNote,
+  mergePatientDetails,
   parsePatientDetails,
   parseStringContent,
 } from "../utils/clinical-note-record";
+import { printClinicalNotePdf } from "../utils/clinical-note-pdf.ts";
 
 const patientDetailFields = [
   { key: 'name', label: 'Name' },
@@ -34,6 +36,8 @@ type Props = {
   source?: ParsedNote; // Optional for new flow
   noteId?: string; // New prop for Supabase subscription flow
   className?: string;
+  initialPatientDetails?: Record<string, string>;
+  onNoteReady?: () => void;
   onNoteSaved?: () => void;
   onNoteDiscarded?: () => void;
 };
@@ -42,6 +46,8 @@ export default function ClinicalNoteViewer({
   source,
   noteId,
   className,
+  initialPatientDetails,
+  onNoteReady,
   onNoteSaved,
   onNoteDiscarded,
 }: Props) {
@@ -66,6 +72,7 @@ export default function ClinicalNoteViewer({
   const [noPatientFoundOpen, setNoPatientFoundOpen] = useState(false);
   const [foundPatient, setFoundPatient] = useState<any>(null);
   const [patientSearchLoading, setPatientSearchLoading] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   // Supabase subscription for new flow
   const { fetchNote } = useClinicalNoteSubscription({
@@ -73,14 +80,17 @@ export default function ClinicalNoteViewer({
     onNoteGenerated: (note) => {
       console.log('📋 Clinical note received from Supabase:', note);
       const parsedNote = mapClinicalNoteRecordToParsedNote(note);
+      parsedNote.patientDetails = mergePatientDetails(
+        parsedNote.patientDetails,
+        initialPatientDetails,
+      );
       console.log('📋 Parsed note data:', parsedNote);
       console.log('📋 Patient Details:', parsedNote.patientDetails);
       console.log('📋 Medical History:', parsedNote.medicalHistory);
       console.log('📋 Problem Faced:', parsedNote.problemFaced);
       setParsed(parsedNote);
       setError(null);
-      // Notify parent that note is ready to reset transcribe bar state
-      onNoteSaved?.();
+      onNoteReady?.();
     },
     onError: (error) => {
       console.error('❌ Error in clinical note subscription:', error);
@@ -395,52 +405,20 @@ export default function ClinicalNoteViewer({
     }
   };
 
-  // Copy to clipboard
-  const handleCopy = async () => {
-    if (!parsed) return;
-    
-    const sections = [];
-    
-    sections.push('Patient Details\n' + patientDetailFields
-      .map(({ key, label }) => `${label}: ${getPatientDetailValue(parsed.patientDetails, key)}`)
-      .join('\n'));
-    
-    const arrayFields = [
-      { name: 'Medical History', data: parsed.medicalHistory },
-      { name: 'Chief Complaint', data: Array.isArray(parsed.problemFaced) ? parsed.problemFaced : [parsed.problemFaced].filter(Boolean) },
-      { name: 'Findings', data: parsed.findings },
-      { name: 'Diagnosis', data: parsed.diagnosis },
-      { name: 'Investigations Advised', data: parsed.investigationsAdvised },
-      { name: 'Doctor Instructions', data: parsed.doctorInstructions },
-      { name: 'Medication Prescribed', data: parsed.medicationPrescribed }
-    ];
-    
-    arrayFields.forEach(({ name, data }) => {
-      const items = Array.isArray(data) ? data.map(item => {
-        if (typeof item === 'string') {
-          return `• ${item}`;
-        } else if (typeof item === 'object' && item !== null) {
-          // Handle medication objects
-          const parts = [];
-          if (item.name) parts.push(item.name);
-          if (item.dosage) parts.push(`(${item.dosage})`);
-          if (item.duration) parts.push(`for ${item.duration}`);
-          if (item.instructions) parts.push(`- ${item.instructions}`);
-          if (item.purpose) parts.push(`[${item.purpose}]`);
-          return `• ${parts.join(' ')}`;
-        }
-        return `• ${String(item)}`;
-      }) : [];
-      sections.push(`${name}\n${items.join('\n')}`);
-    });
-    
-    const text = sections.join('\n\n');
-    
+  const handlePrint = async () => {
+    if (!noteId) {
+      showToast("Save the note before printing.", "warning");
+      return;
+    }
+
+    setPrinting(true);
     try {
-      await navigator.clipboard.writeText(text);
-      showToast("Note copied to clipboard!", "success");
+      await printClinicalNotePdf(noteId);
     } catch (error) {
-      showToast("Failed to copy to clipboard", "error");
+      const message = error instanceof Error ? error.message : "Failed to print note";
+      showToast(message, "error");
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -479,6 +457,50 @@ export default function ClinicalNoteViewer({
     onNoteDiscarded?.();
   };
 
+  const renderNoteActions = () => (
+    <div className="flex flex-wrap gap-2 justify-end mt-6 pt-4 border-t border-gray-200">
+      <Button
+        variant="outlined"
+        startIcon={<EditIcon />}
+        onClick={handleEdit}
+        size="small"
+        sx={{ textTransform: "none" }}
+      >
+        Edit
+      </Button>
+      <Button
+        variant="outlined"
+        startIcon={printing ? <CircularProgress size={16} /> : <PrintIcon />}
+        onClick={() => void handlePrint()}
+        disabled={printing || !noteId}
+        size="small"
+        sx={{ textTransform: "none" }}
+      >
+        Print
+      </Button>
+      <Button
+        variant="contained"
+        startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+        onClick={handleSave}
+        disabled={saving}
+        size="small"
+        sx={{ textTransform: "none" }}
+      >
+        Save
+      </Button>
+      <Button
+        variant="outlined"
+        color="error"
+        startIcon={<DeleteIcon />}
+        onClick={handleDiscardNote}
+        size="small"
+        sx={{ textTransform: "none" }}
+      >
+        Discard
+      </Button>
+    </div>
+  );
+
   if (error) {
     return (
       <Card className={className}>
@@ -503,51 +525,9 @@ export default function ClinicalNoteViewer({
     <>
       <Card className={className}>
         <CardContent>
-          {/* Header with actions */}
-          <div className="flex justify-between items-center mb-4">
-            <Typography variant="h5">Clinical Note</Typography>
-            <div className="flex gap-2">
-              {!editMode && (
-                <>
-                  <Button
-                    variant="outlined"
-                    startIcon={<ContentCopyIcon />}
-                    onClick={handleCopy}
-                    size="small"
-                  >
-                    Copy
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<EditIcon />}
-                    onClick={handleEdit}
-                    size="small"
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    variant="contained"
-                    startIcon={<SaveIcon />}
-                    onClick={handleSave}
-                    disabled={saving}
-                    size="small"
-                  >
-                    {saving ? <CircularProgress size={16} /> : <SaveIcon />}
-                    Save
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    color="error"
-                    startIcon={<DeleteIcon />}
-                    onClick={handleDiscardNote}
-                    size="small"
-                  >
-                    Discard
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
+          <Typography variant="h5" className="mb-4">
+            Clinical Note
+          </Typography>
 
           {editMode && editedValues ? (
             <div className="space-y-6">
@@ -809,6 +789,8 @@ export default function ClinicalNoteViewer({
                 </Typography>
                 {renderMedicationSection(parsed.medicationPrescribed)}
               </div>
+
+              {renderNoteActions()}
             </div>
           )}
         </CardContent>

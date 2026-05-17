@@ -20,6 +20,7 @@ export interface NoteUpdateData {
 export interface StopRecordingOptions {
   patientId?: string;
   intakeId?: string;
+  patientDetails?: Record<string, string>;
 }
 
 export class SocketIOService {
@@ -175,6 +176,9 @@ export class SocketIOService {
       doctorId,
       ...(options.patientId && { patientId: options.patientId }),
       ...(options.intakeId && { intakeId: options.intakeId }),
+      ...(options.patientDetails && Object.keys(options.patientDetails).length > 0 && {
+        patientDetails: options.patientDetails,
+      }),
     };
 
     this.sendMessage('stop_recording', payload);

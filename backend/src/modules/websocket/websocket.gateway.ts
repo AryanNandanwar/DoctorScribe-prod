@@ -88,6 +88,7 @@ export class StreamingWebSocketGateway implements OnGatewayInit, OnGatewayConnec
       doctorId?: string;
       patientId?: string;
       intakeId?: string;
+      patientDetails?: Record<string, string>;
     },
     @ConnectedSocket() client: Socket,
   ) {
@@ -107,6 +108,7 @@ export class StreamingWebSocketGateway implements OnGatewayInit, OnGatewayConnec
         data.doctorId,
         data.patientId,
         data.intakeId,
+        data.patientDetails,
       );
       this.logger.log(`Recording stopped successfully for session: ${data.sessionId}`);
       this.logger.log(`Clinical note stored in backend...`);

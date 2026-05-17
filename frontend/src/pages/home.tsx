@@ -1,11 +1,25 @@
 // pages/HomePage.tsx
-import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Card, CardContent, Chip, CircularProgress, Typography } from "@mui/material";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Typography,
+} from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import StopIcon from "@mui/icons-material/Stop";
 import ResponsiveAppBar from "../components/navbar.tsx";
 import AudioRecorder from "../components/transcribeBar.tsx";
 import ClinicalNoteViewer from "../components/ClinicalNoteViewer.tsx";
 import api from "../lib/api.ts";
+import { useStreamingTranscription } from "../hooks/use-streaming-transcription.ts";
+
+const WEBSOCKET_URL =
+  import.meta.env.VITE_REACT_APP_API_BASE_URL || "http://localhost:3000";
 
 type IntakeCard = {
   id: string;
@@ -21,7 +35,47 @@ type IntakeCard = {
   };
 };
 
+function generateUUID() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+function intakePatientToDetails(patient: IntakeCard["patient"]): Record<string, string> {
+  return {
+    name: patient.fullName,
+    ...(patient.gender ? { gender: patient.gender } : {}),
+    ...(patient.age ? { age: patient.age } : {}),
+    ...(patient.phone ? { contact: patient.phone } : {}),
+  };
+}
+
+function getDoctorId(): string | null {
+  try {
+    const userStr = localStorage.getItem("ds_user") ?? sessionStorage.getItem("ds_user");
+    if (userStr) {
+      const user = JSON.parse(userStr);
+      return user.id ?? null;
+    }
+  } catch (err) {
+    console.error("Failed to get doctor ID:", err);
+  }
+  return null;
+}
+
+function isAuthenticated(): boolean {
+  try {
+    const token = localStorage.getItem("ds_token") ?? sessionStorage.getItem("ds_token");
+    return Boolean(token);
+  } catch {
+    return false;
+  }
+}
+
 export default function HomePage() {
+  const navigate = useNavigate();
   const [currentNoteId, setCurrentNoteId] = useState<string | null>(null);
   const [isGeneratingNote, setIsGeneratingNote] = useState(false);
   const [isNoteReady, setIsNoteReady] = useState(false);
@@ -29,7 +83,26 @@ export default function HomePage() {
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [activeIntakeId, setActiveIntakeId] = useState<string | null>(null);
+  const [activePatientId, setActivePatientId] = useState<string | null>(null);
+  const [activePatientDetails, setActivePatientDetails] = useState<Record<string, string> | null>(null);
+  const [intakeRecordingError, setIntakeRecordingError] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  const {
+    isRecording,
+    isConnecting,
+    isConnected,
+    error: streamingError,
+    startRecording,
+    stopRecording,
+    clearError,
+  } = useStreamingTranscription({
+    websocketUrl: WEBSOCKET_URL,
+    onError: (message) => setIntakeRecordingError(message),
+    onSessionStart: (sessionId) => console.log("Intake session started:", sessionId),
+    onSessionEnd: () => console.log("Intake session ended"),
+  });
 
   useEffect(() => {
     const raw = localStorage.getItem("ds_user") ?? sessionStorage.getItem("ds_user");
@@ -77,40 +150,139 @@ export default function HomePage() {
     return () => window.clearInterval(intervalId);
   }, [fetchQueue]);
 
-  // Handle note ID generation from AudioRecorder
+  const requestWakeLock = async () => {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+      }
+    } catch {
+      // Wake lock not supported or failed
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      void wakeLockRef.current.release();
+      wakeLockRef.current = null;
+    }
+  };
+
+  const resetIntakeRecording = () => {
+    setActiveIntakeId(null);
+    setActivePatientId(null);
+    setActivePatientDetails(null);
+    setIntakeRecordingError(null);
+    releaseWakeLock();
+  };
+
   const handleNoteIdGenerated = (noteId: string) => {
-    console.log("🆔 Note ID generated:", noteId);
+    console.log("Note ID generated:", noteId);
     setCurrentNoteId(noteId);
     setIsGeneratingNote(true);
     setIsNoteReady(false);
   };
 
-  // Handle session start from AudioRecorder
   const handleSessionStart = (sessionId: string) => {
     console.log("Session started:", sessionId);
   };
 
-  // Handle session end from AudioRecorder
   const handleSessionEnd = () => {
     console.log("Session ended");
   };
 
-  // Handle note saved callback
-  const handleNoteSaved = () => {
-    console.log("Note saved successfully");
+  const handleNoteReady = () => {
+    console.log("Clinical note ready");
     setIsNoteReady(true);
     setIsGeneratingNote(false);
-    setActiveIntakeId(null);
+    resetIntakeRecording();
+  };
+
+  const handleNoteSaved = () => {
+    console.log("Note saved successfully");
+    setCurrentNoteId(null);
+    setIsNoteReady(false);
+    setIsGeneratingNote(false);
+    resetIntakeRecording();
     fetchQueue();
   };
 
-  // Handle note discarded callback
   const handleNoteDiscarded = () => {
     console.log("Note discarded");
     setCurrentNoteId(null);
     setIsNoteReady(false);
     setIsGeneratingNote(false);
-    setActiveIntakeId(null);
+    resetIntakeRecording();
+  };
+
+  const handleStartRecording = async (options?: { resetIntakeOnFailure?: boolean }) => {
+    if (!isAuthenticated()) {
+      setIntakeRecordingError("Please log in to start recording.");
+      navigate("/login");
+      return;
+    }
+
+    try {
+      await requestWakeLock();
+      clearError();
+      setIntakeRecordingError(null);
+      await startRecording();
+      console.log("Recording started");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to start recording";
+      setIntakeRecordingError(msg);
+      releaseWakeLock();
+      if (options?.resetIntakeOnFailure) {
+        resetIntakeRecording();
+      }
+    }
+  };
+
+  const handleStopRecording = async () => {
+    try {
+      const noteId = generateUUID();
+      handleNoteIdGenerated(noteId);
+
+      const doctorId = getDoctorId();
+      if (!doctorId) {
+        setIntakeRecordingError("Doctor ID not found. Please log in again.");
+        return;
+      }
+
+      if (!activePatientDetails) {
+        setIntakeRecordingError("Patient details missing. Please try again.");
+        return;
+      }
+
+      console.log("Stopping intake recording with data:", {
+        noteId,
+        doctorId,
+        patientId: activePatientId,
+        intakeId: activeIntakeId,
+        patientDetails: activePatientDetails,
+      });
+
+      stopRecording(noteId, doctorId, {
+        patientId: activePatientId ?? undefined,
+        intakeId: activeIntakeId ?? undefined,
+        patientDetails: activePatientDetails,
+      });
+      releaseWakeLock();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to stop recording";
+      setIntakeRecordingError(msg);
+    }
+  };
+
+  const handleIntakeRecord = async (intake: IntakeCard) => {
+    if (activeIntakeId) return;
+
+    const patient = intake.patient;
+    setActiveIntakeId(intake.id);
+    setActivePatientId(patient.id);
+    setActivePatientDetails(intakePatientToDetails(patient));
+    setIntakeRecordingError(null);
+
+    await handleStartRecording({ resetIntakeOnFailure: true });
   };
 
   const cancelIntake = async (intakeId: string) => {
@@ -122,16 +294,14 @@ export default function HomePage() {
     }
   };
 
+  const displayRecordingError = intakeRecordingError || streamingError;
+
   return (
     <div className="min-h-screen">
-      {/* Top Navbar */}
       <ResponsiveAppBar />
 
-      {/* Main Content */}
       <main className="pt-20 pb-32 bg-gray-50 min-h-screen flex flex-col">
-        {/* Centered content wrapper */}
         <div className="flex-1 w-full">
-          {/* Header text - centered */}
           <div className="mb-6 px-4 md:px-8 max-w-3xl mx-auto text-center">
             <h1 className="text-3xl font-bold">Welcome</h1>
             <p className="text-gray-700">
@@ -140,7 +310,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          {userRole !== "receptionist" && (
+          {userRole !== "receptionist" && !currentNoteId && (
             <section className="px-4 md:px-8 max-w-5xl mx-auto mb-8 w-full">
               <div className="flex items-center justify-between gap-4 mb-3">
                 <Typography variant="h6" className="font-semibold text-slate-800">
@@ -186,7 +356,11 @@ export default function HomePage() {
                                 Added {new Date(intake.createdAt).toLocaleTimeString()}
                               </Typography>
                             </div>
-                            <Chip size="small" color={isActive ? "warning" : "default"} label={isActive ? "Recording" : "Pending"} />
+                            <Chip
+                              size="small"
+                              color={isActive ? "warning" : "default"}
+                              label={isActive ? (isRecording ? "Recording" : "Connecting") : "Pending"}
+                            />
                           </div>
 
                           <div className="flex flex-wrap gap-2 mt-3">
@@ -195,26 +369,48 @@ export default function HomePage() {
                             {patient.phone && <Chip size="small" label={`Contact: ${patient.phone}`} />}
                           </div>
 
-                          <div className="mt-4">
+                          <div className="mt-4 space-y-2">
+                            {isActive && displayRecordingError && (
+                              <Alert severity="error" className="text-sm">
+                                {displayRecordingError}
+                              </Alert>
+                            )}
+
                             {isActive ? (
-                              <AudioRecorder
-                                variant="inline"
-                                patientId={patient.id}
-                                intakeId={intake.id}
-                                isGeneratingNote={isGeneratingNote}
-                                isNoteReady={isNoteReady}
-                                onSessionStart={handleSessionStart}
-                                onSessionEnd={handleSessionEnd}
-                                onNoteSaved={handleNoteSaved}
-                                onNoteIdGenerated={handleNoteIdGenerated}
-                              />
+                              <div className="flex flex-col gap-2">
+                                {isRecording ? (
+                                  <>
+                                    <Typography variant="body2" className="text-red-600 animate-pulse">
+                                      Recording in progress… Speak clearly into your microphone.
+                                    </Typography>
+                                    <Button
+                                      variant="contained"
+                                      color="error"
+                                      size="small"
+                                      startIcon={<StopIcon />}
+                                      onClick={() => void handleStopRecording()}
+                                      disabled={isGeneratingNote}
+                                      sx={{ textTransform: "none", alignSelf: "flex-start" }}
+                                    >
+                                      Stop Recording
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <CircularProgress size={18} />
+                                    <Typography variant="body2" color="text.secondary">
+                                      {isConnecting || !isConnected ? "Connecting…" : "Starting microphone…"}
+                                    </Typography>
+                                  </div>
+                                )}
+                              </div>
                             ) : (
                               <div className="flex gap-2">
                                 <Button
                                   variant="contained"
                                   size="small"
-                                  onClick={() => setActiveIntakeId(intake.id)}
-                                  disabled={Boolean(activeIntakeId)}
+                                  onClick={() => void handleIntakeRecord(intake)}
+                                  disabled={Boolean(activeIntakeId) || isConnecting}
                                   sx={{ textTransform: "none" }}
                                 >
                                   Record
@@ -241,12 +437,13 @@ export default function HomePage() {
             </section>
           )}
 
-          {/* Clinical Note Display - using new Supabase flow */}
           {currentNoteId && (
             <div className="px-4 md:px-8 max-w-3xl mx-auto">
               <ClinicalNoteViewer
                 noteId={currentNoteId}
                 className="w-full"
+                initialPatientDetails={activePatientDetails ?? undefined}
+                onNoteReady={handleNoteReady}
                 onNoteSaved={handleNoteSaved}
                 onNoteDiscarded={handleNoteDiscarded}
               />
@@ -255,14 +452,12 @@ export default function HomePage() {
         </div>
       </main>
 
-      {/* Fixed Audio Recorder Bar */}
-      {userRole !== "receptionist" && (
+      {userRole !== "receptionist" && !activeIntakeId && !currentNoteId && (
         <AudioRecorder
           isGeneratingNote={isGeneratingNote}
           isNoteReady={isNoteReady}
           onSessionStart={handleSessionStart}
           onSessionEnd={handleSessionEnd}
-          onNoteSaved={handleNoteSaved}
           onNoteIdGenerated={handleNoteIdGenerated}
         />
       )}

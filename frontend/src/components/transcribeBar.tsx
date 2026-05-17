@@ -29,6 +29,7 @@ interface AudioRecorderProps {
   intakeId?: string;
   variant?: "bar" | "inline";
   className?: string;
+  autoStart?: boolean;
 }
 
 export const AudioRecorder: React.FC<AudioRecorderProps> = ({
@@ -43,6 +44,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   intakeId,
   variant = "bar",
   className,
+  autoStart = false,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [wakeLock, setWakeLock] = useState<any>(null);
@@ -50,6 +52,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isGeneratingFromUpload, setIsGeneratingFromUpload] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const autoStartAttemptedRef = useRef(false);
   const navigate = useNavigate();
 
   // Use streaming transcription hook (audio-only)
@@ -132,6 +135,14 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       releaseWakeLock();
     }
   };
+
+  useEffect(() => {
+    if (!autoStart || autoStartAttemptedRef.current) return;
+    if (!isAuthenticated || !isConnected || isConnecting || isRecording || isGeneratingNote) return;
+
+    autoStartAttemptedRef.current = true;
+    void handleStartRecording();
+  }, [autoStart, isAuthenticated, isConnected, isConnecting, isRecording, isGeneratingNote]);
 
   const handleStopRecording = async () => {
     try {
