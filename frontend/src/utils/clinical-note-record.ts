@@ -77,7 +77,7 @@ export function parsePatientDetails(patientDetails: unknown): Record<string, str
     const parts = trimmed.split(",").map((part) => part.trim());
 
     parts.forEach((part) => {
-      const match = part.match(/^(Name|Age|Gender|Contact):\s*(.+)$/i);
+      const match = part.match(/^(Name|Age|Gender|Weight|Contact):\s*(.+)$/i);
       if (match) {
         const [, key, value] = match;
         details[key.toLowerCase()] = value.trim();

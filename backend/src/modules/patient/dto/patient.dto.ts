@@ -15,6 +15,10 @@ export class CreatePatientDto {
   age?: string;
 
   @IsOptional()
+  @IsString()
+  weight?: string;
+
+  @IsOptional()
   // We store normalized phone but validate loosely here; consider libphonenumber for stricter validation
   @IsString()
   @IsPhoneNumber()
@@ -35,6 +39,10 @@ export class UpdatePatientDto {
   @IsOptional()
   @IsString()
   age?: string;
+
+  @IsOptional()
+  @IsString()
+  weight?: string;
 
   @IsOptional()
   @IsString()

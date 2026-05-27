@@ -20,6 +20,7 @@ import NotesIcon from "@mui/icons-material/Notes";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { useNavigate } from "react-router-dom";
 import ResponsiveAppBar from "../components/navbar";
+import { useRequireAuth } from "../hooks/use-require-auth";
 
 type Patient = {
   id: string;
@@ -38,6 +39,10 @@ type NoteSummary = {
 };
 
 export default function PatientsPage() {
+  const { authorized } = useRequireAuth({
+    requiredRole: "doctor",
+    wrongRoleRedirect: "/receptionist/intake",
+  });
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [notesSummaries, setNotesSummaries] = useState<Record<string, NoteSummary[]>>({});
@@ -50,6 +55,8 @@ export default function PatientsPage() {
   const [sortOrder, setSortOrder] = useState<"latest" | "oldest">("latest");
 
   useEffect(() => {
+    if (!authorized) return;
+
     const fetchPatients = async () => {
       try {
         const res = await api.get("/api/doctor/me/patients");
@@ -77,7 +84,7 @@ export default function PatientsPage() {
     };
     
     fetchPatients();
-  }, []);
+  }, [authorized]);
 
   // Filter and Sort Logic
   const filteredPatients = useMemo(() => {
@@ -125,6 +132,10 @@ export default function PatientsPage() {
   const handleNoteClick = (noteId: string) => {
     navigate(`/notes#${noteId}`);
   };
+
+  if (!authorized) {
+    return null;
+  }
 
   if (loading) {
     return (

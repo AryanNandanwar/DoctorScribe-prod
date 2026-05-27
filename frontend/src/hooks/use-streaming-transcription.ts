@@ -3,6 +3,7 @@ import { SocketIOService } from '../services/websocket-service';
 
 export interface StreamingState {
   isRecording: boolean;
+  isPaused: boolean;
   isConnecting: boolean;
   isConnected: boolean;
   error: string | null;
@@ -30,6 +31,7 @@ export const useStreamingTranscription = ({
 }: UseStreamingTranscriptionOptions) => {
   const [state, setState] = useState<StreamingState>({
     isRecording: false,
+    isPaused: false,
     isConnecting: false,
     isConnected: false,
     error: null,
@@ -41,6 +43,7 @@ export const useStreamingTranscription = ({
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const sessionIdRef = useRef<string | null>('');
+  const isPausedRef = useRef(false);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -143,7 +146,7 @@ export const useStreamingTranscription = ({
       // Handle audio chunks from worklet
       workletNodeRef.current.port.onmessage = (event) => {
         console.log("📡 Hook: Received message from worklet:", event.data.type);
-        if (event.data.type === 'audio_chunk' && wsRef.current?.isConnected()) {
+        if (event.data.type === 'audio_chunk' && wsRef.current?.isConnected() && !isPausedRef.current) {
           console.log("🎵 Hook: Forwarding audio chunk to WebSocket:", {
             dataLength: event.data.data.length,
             timestamp: event.data.timestamp
@@ -167,9 +170,11 @@ export const useStreamingTranscription = ({
       console.log("📡 Sending start_recording message to server...");
       wsRef.current?.startRecording(sessionId);
 
+      isPausedRef.current = false;
       setState(prev => ({
         ...prev,
         isRecording: true,
+        isPaused: false,
         error: null,
         sessionId
       }));
@@ -242,13 +247,55 @@ export const useStreamingTranscription = ({
 
     workletNodeRef.current = null;
     sessionIdRef.current = null;
+    isPausedRef.current = false;
 
     setState(prev => ({
       ...prev,
-      isRecording: false
+      isRecording: false,
+      isPaused: false
     }));
     
     console.log("✅ Recording stopped and cleanup completed");
+  }, []);
+
+  const pauseRecording = useCallback(() => {
+    if (!sessionIdRef.current) return;
+
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.postMessage({ type: 'pause' });
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        track.enabled = false;
+      });
+    }
+
+    isPausedRef.current = true;
+    setState((prev) => {
+      if (!prev.isRecording || prev.isPaused) return prev;
+      return { ...prev, isPaused: true };
+    });
+  }, []);
+
+  const resumeRecording = useCallback(() => {
+    if (!sessionIdRef.current) return;
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        track.enabled = true;
+      });
+    }
+
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.postMessage({ type: 'resume' });
+    }
+
+    isPausedRef.current = false;
+    setState((prev) => {
+      if (!prev.isRecording || !prev.isPaused) return prev;
+      return { ...prev, isPaused: false };
+    });
   }, []);
 
   const clearError = useCallback(() => {
@@ -270,6 +317,8 @@ export const useStreamingTranscription = ({
   return {
     ...state,
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     clearError,
     saveRecording,

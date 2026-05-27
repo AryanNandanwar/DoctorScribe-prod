@@ -54,6 +54,7 @@ export class IntakeService {
         fullName: dto.fullName,
         gender: dto.gender,
         age: dto.age,
+        weight: dto.weight,
         phone: trimmedPhone,
       });
     } else {
@@ -61,6 +62,7 @@ export class IntakeService {
         fullName: dto.fullName,
         gender: dto.gender,
         age: dto.age,
+        weight: dto.weight,
         phone: trimmedPhone,
         doctor,
         doctorId,

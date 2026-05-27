@@ -11,6 +11,9 @@ import SaveIcon from "@mui/icons-material/Save";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import PrintIcon from "@mui/icons-material/Print";
+import RemoveIcon from "@mui/icons-material/Remove";
+import IconButton from "@mui/material/IconButton";
+import { type Medication } from "../types/clinical-note";
 import api from "../lib/api";
 import SnackbarToast from "./SnackbarToast";
 import ConfirmDialog from "./ConfirmDialog";
@@ -29,8 +32,129 @@ const patientDetailFields = [
   { key: 'name', label: 'Name' },
   { key: 'age', label: 'Age' },
   { key: 'gender', label: 'Gender' },
-  { key: 'contact', label: 'Contact' }
+  { key: 'weight', label: 'Weight' },
+  { key: 'contact', label: 'Contact' },
 ];
+
+function itemToEditableString(item: unknown): string {
+  if (item === null || item === undefined) return "";
+  if (typeof item === "string") return item;
+  if (typeof item === "number" || typeof item === "boolean") return String(item);
+  if (Array.isArray(item)) return item.map(itemToEditableString).join(", ");
+  if (typeof item === "object") {
+    return Object.entries(item as Record<string, unknown>)
+      .map(([key, val]) => `${key}: ${itemToEditableString(val)}`)
+      .join(", ");
+  }
+  return String(item);
+}
+
+function medicationToEditableString(medication: string | Medication): string {
+  if (typeof medication === "string") return medication;
+  const parts: string[] = [];
+  if (medication.name) parts.push(medication.name);
+  if (medication.dosage) parts.push(`(${medication.dosage})`);
+  if (medication.duration) parts.push(`for ${medication.duration}`);
+  if (medication.instructions) parts.push(`- ${medication.instructions}`);
+  if (medication.purpose) parts.push(`[${medication.purpose}]`);
+  return parts.join(" ");
+}
+
+function normalizeFieldForEdit(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    const items = value.map(itemToEditableString);
+    return items.length > 0 ? items : [""];
+  }
+  if (typeof value === "object" && value !== null) {
+    const items = Object.entries(value as Record<string, unknown>).map(
+      ([key, val]) => `${key}: ${itemToEditableString(val)}`,
+    );
+    return items.length > 0 ? items : [""];
+  }
+  if (typeof value === "string" && value.trim()) {
+    return [value];
+  }
+  return [""];
+}
+
+function normalizeMedicationsForEdit(
+  medications: ParsedNote["medicationPrescribed"],
+): string[] {
+  if (!Array.isArray(medications) || medications.length === 0) return [""];
+  return medications.map((med) =>
+    typeof med === "string" ? med : medicationToEditableString(med),
+  );
+}
+
+function getEditItems(items: string[] | undefined): string[] {
+  return items && items.length > 0 ? items : [""];
+}
+
+type EditableStringArraySectionProps = {
+  label: string;
+  items: string[];
+  onChange: (items: string[]) => void;
+  placeholder?: string;
+};
+
+function EditableStringArraySection({
+  label,
+  items,
+  onChange,
+  placeholder,
+}: EditableStringArraySectionProps) {
+  const updateItem = (index: number, text: string) => {
+    const next = [...items];
+    next[index] = text;
+    onChange(next);
+  };
+
+  const removeItem = (index: number) => {
+    const next = items.filter((_, i) => i !== index);
+    onChange(next.length > 0 ? next : [""]);
+  };
+
+  const addItem = () => {
+    onChange([...items, ""]);
+  };
+
+  return (
+    <div>
+      <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
+        {label}
+      </Typography>
+      <div className="space-y-2">
+        {items.map((item, index) => (
+          <div key={index} className="flex gap-2 items-center">
+            <TextField
+              fullWidth
+              size="small"
+              value={item}
+              onChange={(e) => updateItem(index, e.target.value)}
+              variant="outlined"
+              placeholder={placeholder}
+            />
+            <IconButton
+              size="small"
+              onClick={() => removeItem(index)}
+              disabled={items.length === 1 && item === ""}
+              aria-label="Remove item"
+            >
+              <RemoveIcon fontSize="small" />
+            </IconButton>
+          </div>
+        ))}
+      </div>
+      <Button
+        size="small"
+        onClick={addItem}
+        sx={{ mt: 1, textTransform: "none" }}
+      >
+        Add item
+      </Button>
+    </div>
+  );
+}
 
 type Props = {
   source?: ParsedNote; // Optional for new flow
@@ -192,7 +316,7 @@ export default function ClinicalNoteViewer({
 
     return details[key] ||
       details[key.charAt(0).toUpperCase() + key.slice(1)] ||
-      details[key === 'name' ? 'Name' : key === 'age' ? 'Age' : key === 'gender' ? 'Gender' : key === 'contact' ? 'Contact' : ''] ||
+      details[key === 'name' ? 'Name' : key === 'age' ? 'Age' : key === 'gender' ? 'Gender' : key === 'weight' ? 'Weight' : key === 'contact' ? 'Contact' : ''] ||
       '';
   };
 
@@ -331,17 +455,18 @@ export default function ClinicalNoteViewer({
     setSaving(true);
     try {
       const payload = {
-        patientDetails: mergePatientDetails(
-          noteToSave.patientDetails,
-          initialPatientDetails,
-        ),
-        medicalHistory: noteToSave.medicalHistory || [],
-        problemFaced: noteToSave.problemFaced || "",
-        findings: noteToSave.findings || [],
-        diagnosis: noteToSave.diagnosis || [],
-        investigationsAdvised: noteToSave.investigationsAdvised || [],
-        doctorInstructions: noteToSave.doctorInstructions || [],
-        medicationPrescribed: noteToSave.medicationPrescribed || [],
+        patientDetails: noteToSave.patientDetails || {},
+        medicalHistory: (noteToSave.medicalHistory || []).filter(Boolean),
+        problemFaced: Array.isArray(noteToSave.problemFaced)
+          ? noteToSave.problemFaced.filter(Boolean)
+          : noteToSave.problemFaced
+            ? [noteToSave.problemFaced]
+            : [],
+        findings: (Array.isArray(noteToSave.findings) ? noteToSave.findings : []).filter(Boolean),
+        diagnosis: (noteToSave.diagnosis || []).filter(Boolean),
+        investigationsAdvised: (noteToSave.investigationsAdvised || []).filter(Boolean),
+        doctorInstructions: (noteToSave.doctorInstructions || []).filter(Boolean),
+        medicationPrescribed: (noteToSave.medicationPrescribed || []).filter(Boolean),
         ...(patientId && { patientId }) // Add patientId if provided
       };
 
@@ -427,8 +552,18 @@ export default function ClinicalNoteViewer({
 
   // Edit functions
   const handleEdit = () => {
+    if (!parsed) return;
     setEditMode(true);
-    setEditedValues(parsed ? { ...parsed } : null);
+    setEditedValues({
+      ...parsed,
+      medicalHistory: normalizeFieldForEdit(parsed.medicalHistory),
+      problemFaced: normalizeFieldForEdit(parsed.problemFaced),
+      findings: normalizeFieldForEdit(parsed.findings),
+      diagnosis: normalizeFieldForEdit(parsed.diagnosis),
+      investigationsAdvised: normalizeFieldForEdit(parsed.investigationsAdvised),
+      doctorInstructions: normalizeFieldForEdit(parsed.doctorInstructions),
+      medicationPrescribed: normalizeMedicationsForEdit(parsed.medicationPrescribed),
+    });
   };
 
   const handleCancelEdit = () => {
@@ -566,134 +701,68 @@ export default function ClinicalNoteViewer({
                 </div>
               </div>
 
-              {/* Medical History */}
-              <div>
-                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                  Medical History -
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={Array.isArray(editedValues.medicalHistory) ? editedValues.medicalHistory.join('\n') : editedValues.medicalHistory || ''}
-                  onChange={(e) => handleFieldChange('medicalHistory', e.target.value.split('\n').filter(Boolean))}
-                  variant="outlined"
-                  placeholder="Enter medical history (one item per line)"
-                />
-              </div>
+              <EditableStringArraySection
+                label="Medical History -"
+                items={getEditItems(editedValues.medicalHistory)}
+                onChange={(items) => handleFieldChange("medicalHistory", items)}
+                placeholder="Enter medical history item"
+              />
 
-              {/* Chief Complaint */}
-              <div>
-                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                  Chief Complaint -
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={Array.isArray(editedValues.problemFaced) ? editedValues.problemFaced.join('\n') : editedValues.problemFaced || ''}
-                  onChange={(e) => handleFieldChange('problemFaced', e.target.value)}
-                  variant="outlined"
-                  placeholder="Enter chief complaint"
-                />
-              </div>
+              <EditableStringArraySection
+                label="Chief Complaint -"
+                items={getEditItems(
+                  Array.isArray(editedValues.problemFaced)
+                    ? editedValues.problemFaced
+                    : editedValues.problemFaced
+                      ? [editedValues.problemFaced]
+                      : undefined,
+                )}
+                onChange={(items) => handleFieldChange("problemFaced", items)}
+                placeholder="Enter chief complaint"
+              />
 
-              {/* Findings */}
-              <div>
-                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                  Findings -
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={Array.isArray(editedValues.findings) ? editedValues.findings.join('\n') : renderNestedValue(editedValues.findings)}
-                  onChange={(e) => handleFieldChange('findings', e.target.value.split('\n').filter(Boolean))}
-                  variant="outlined"
-                  placeholder="Enter findings (one item per line)"
-                />
-              </div>
+              <EditableStringArraySection
+                label="Findings -"
+                items={getEditItems(
+                  Array.isArray(editedValues.findings) ? editedValues.findings : undefined,
+                )}
+                onChange={(items) => handleFieldChange("findings", items)}
+                placeholder="Enter finding"
+              />
 
-              {/* Diagnosis */}
-              <div>
-                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                  Diagnosis -
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={Array.isArray(editedValues.diagnosis) ? editedValues.diagnosis.join('\n') : editedValues.diagnosis || ''}
-                  onChange={(e) => handleFieldChange('diagnosis', e.target.value.split('\n').filter(Boolean))}
-                  variant="outlined"
-                  placeholder="Enter diagnosis (one item per line)"
-                />
-              </div>
+              <EditableStringArraySection
+                label="Diagnosis -"
+                items={getEditItems(editedValues.diagnosis)}
+                onChange={(items) => handleFieldChange("diagnosis", items)}
+                placeholder="Enter diagnosis"
+              />
 
-              {/* Investigations Advised */}
-              <div>
-                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                  Investigations Advised -
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={Array.isArray(editedValues.investigationsAdvised) ? editedValues.investigationsAdvised.join('\n') : editedValues.investigationsAdvised || ''}
-                  onChange={(e) => handleFieldChange('investigationsAdvised', e.target.value.split('\n').filter(Boolean))}
-                  variant="outlined"
-                  placeholder="Enter investigations (one item per line)"
-                />
-              </div>
+              <EditableStringArraySection
+                label="Investigations Advised -"
+                items={getEditItems(editedValues.investigationsAdvised)}
+                onChange={(items) => handleFieldChange("investigationsAdvised", items)}
+                placeholder="Enter investigation"
+              />
 
-              {/* Doctor Instructions */}
-              <div>
-                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                  Doctor Instructions -
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={Array.isArray(editedValues.doctorInstructions) ? editedValues.doctorInstructions.join('\n') : editedValues.doctorInstructions || ''}
-                  onChange={(e) => handleFieldChange('doctorInstructions', e.target.value.split('\n').filter(Boolean))}
-                  variant="outlined"
-                  placeholder="Enter instructions (one item per line)"
-                />
-              </div>
+              <EditableStringArraySection
+                label="Doctor Instructions -"
+                items={getEditItems(editedValues.doctorInstructions)}
+                onChange={(items) => handleFieldChange("doctorInstructions", items)}
+                placeholder="Enter instruction"
+              />
 
-              {/* Medication Prescribed */}
-              <div>
-                <Typography variant="body2" className="w-32 font-medium text-gray-700 mb-2">
-                  Medication Prescribed -
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  value={Array.isArray(editedValues.medicationPrescribed) 
-                    ? editedValues.medicationPrescribed.map(med => 
-                        typeof med === 'string' 
-                          ? med 
-                          : typeof med === 'object' && med !== null
-                            ? (() => {
-                                const parts = [];
-                                if (med.name) parts.push(med.name);
-                                if (med.dosage) parts.push(`(${med.dosage})`);
-                                if (med.duration) parts.push(`for ${med.duration}`);
-                                if (med.instructions) parts.push(`- ${med.instructions}`);
-                                if (med.purpose) parts.push(`[${med.purpose}]`);
-                                return parts.join(' ');
-                              })()
-                            : String(med)
-                      ).join('\n')
-                    : editedValues.medicationPrescribed || ''
-                  }
-                  onChange={(e) => handleFieldChange('medicationPrescribed', e.target.value.split('\n').filter(Boolean))}
-                  variant="outlined"
-                  placeholder="Enter medications (one item per line)"
-                />
-              </div>
+              <EditableStringArraySection
+                label="Medication Prescribed -"
+                items={getEditItems(
+                  Array.isArray(editedValues.medicationPrescribed)
+                    ? editedValues.medicationPrescribed.map((med) =>
+                        typeof med === "string" ? med : medicationToEditableString(med),
+                      )
+                    : undefined,
+                )}
+                onChange={(items) => handleFieldChange("medicationPrescribed", items)}
+                placeholder="Enter medication"
+              />
 
               {/* Edit Actions */}
               <div className="flex gap-3 mt-6 pt-4 border-t">

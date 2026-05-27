@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useState } from "react";
 import {
   Alert,
   Button,
@@ -13,11 +13,14 @@ import SaveIcon from "@mui/icons-material/Save";
 import { useNavigate } from "react-router-dom";
 import ResponsiveAppBar from "../components/navbar";
 import api from "../lib/api";
+import { clearAuth } from "../lib/auth";
+import { useRequireAuth } from "../hooks/use-require-auth";
 
 const emptyForm = {
   fullName: "",
   gender: "",
   age: "",
+  weight: "",
   phone: "",
 };
 
@@ -27,23 +30,10 @@ export default function ReceptionistIntakePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const raw = localStorage.getItem("ds_user") ?? sessionStorage.getItem("ds_user");
-    if (!raw) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    try {
-      const user = JSON.parse(raw);
-      if (user.role !== "receptionist") {
-        navigate("/", { replace: true });
-      }
-    } catch {
-      navigate("/login", { replace: true });
-    }
-  }, [navigate]);
+  const { authorized } = useRequireAuth({
+    requiredRole: "receptionist",
+    wrongRoleRedirect: "/",
+  });
 
   const updateField = (key: keyof typeof emptyForm, value: string) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -65,16 +55,27 @@ export default function ReceptionistIntakePage() {
         fullName: form.fullName.trim(),
         gender: form.gender || undefined,
         age: form.age.trim() || undefined,
+        weight: form.weight.trim() || undefined,
         phone: form.phone.trim() || undefined,
       });
       setMessage("Patient added to the doctor's queue.");
       setForm(emptyForm);
     } catch (err: any) {
+      if (err?.response?.status === 401) {
+        clearAuth();
+        navigate("/login", { replace: true });
+        return;
+      }
+
       setError(err?.response?.data?.message || "Failed to save patient intake.");
     } finally {
       setSaving(false);
     }
   };
+
+  if (!authorized) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -115,6 +116,12 @@ export default function ReceptionistIntakePage() {
                     label="Age"
                     value={form.age}
                     onChange={(event) => updateField("age", event.target.value)}
+                  />
+                  <TextField
+                    label="Weight"
+                    value={form.weight}
+                    onChange={(event) => updateField("weight", event.target.value)}
+                    placeholder="e.g. 72 kg"
                   />
                   <TextField
                     label="Contact"

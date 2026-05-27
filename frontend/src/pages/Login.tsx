@@ -14,7 +14,8 @@ import {
 } from "@mui/material";
 import Visibility from "@mui/icons-material/Visibility";
 import VisibilityOff from "@mui/icons-material/VisibilityOff";
-import api from "../lib/api"; 
+import api from "../lib/api";
+import { saveAuthSession } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
 
 // EchoAide Fullscreen Login Page (React + TypeScript + Tailwind + MUI)
@@ -59,25 +60,16 @@ export default function Login({ onSubmit }: Props) {
       const data = resp.data;
       const user = data?.user ? { ...data.user, role: accountType } : undefined;
 
-      console.log("Login successful:", data.accessToken, user);
-
-      // if "remember" store token; otherwise store in sessionStorage
-      if (data?.accessToken) {
-        if (remember) {
-          localStorage.setItem("ds_token", data.accessToken);
-        } else {
-          sessionStorage.setItem("ds_token", data.accessToken);
-        }
-      }
-
-      // optionally store user object (non-sensitive)
-      if (user) {
-        const userJson = JSON.stringify(user);
-        if (remember) {
-          localStorage.setItem("ds_user", userJson);
-        } else {
-          sessionStorage.setItem("ds_user", userJson);
-        }
+      if (data?.accessToken && data?.refreshToken && user) {
+        saveAuthSession({
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          user,
+          remember,
+        });
+      } else if (data?.accessToken) {
+        setError("Login succeeded but session tokens were missing. Please try again.");
+        return;
       }
 
       // call parent handler if provided

@@ -42,6 +42,7 @@ export class PatientService {
       fullName: dto.fullName,
       gender: dto.gender,
       age: dto.age,
+      weight: dto.weight,
       phone: dto.phone ? normalizePhone(dto.phone) : undefined,
       doctor,      // relation
       doctorId,    // FK column

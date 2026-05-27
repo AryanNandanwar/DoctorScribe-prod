@@ -18,6 +18,9 @@ export class Patient {
   @Column({ type: 'text', nullable: true })
   age?: string;
 
+  @Column({ type: 'text', nullable: true })
+  weight?: string;
+
   @Column({ type: 'text', nullable: true, unique: false, name: 'contact' })
   @Index()
   phone?: string;

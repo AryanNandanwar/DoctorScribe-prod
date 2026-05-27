@@ -8,6 +8,11 @@ services:
       FRONTEND_ORIGIN: http://localhost:8081
 
   nginx:
+    # Inherits build from docker-compose.yml. For local-only Vite args, use:
+    # build:
+    #   context: ./frontend
+    #   args:
+    #     VITE_DEV: "true"
     ports:
       - "8081:80"
     volumes:

@@ -15,6 +15,10 @@ export class CreateIntakePatientDto {
 
   @IsOptional()
   @IsString()
+  weight?: string;
+
+  @IsOptional()
+  @IsString()
   @IsPhoneNumber()
   phone?: string;
 }
