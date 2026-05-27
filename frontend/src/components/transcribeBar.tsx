@@ -2,10 +2,13 @@ import React, { useEffect, useState, useRef } from "react";
 import { Button, CircularProgress, Alert, Chip } from "@mui/material";
 import MicIcon from "@mui/icons-material/Mic";
 import StopIcon from "@mui/icons-material/Stop";
+import PauseIcon from "@mui/icons-material/Pause";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import UploadIcon from "@mui/icons-material/Upload";
 import DownloadIcon from "@mui/icons-material/Download";
 import { useStreamingTranscription } from "../hooks/use-streaming-transcription";
 import { getWebSocketUrl } from "../lib/websocket-url";
+import { ensureValidAccessToken, getStoredUser, hasValidSession } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
 
 // UUID generation utility
@@ -60,10 +63,13 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   // Use streaming transcription hook (audio-only)
   const {
     isRecording,
+    isPaused,
     isConnecting,
     isConnected,
     error,
     startRecording,
+    pauseRecording,
+    resumeRecording,
     stopRecording,
     clearError,
     sendAudioChunk
@@ -83,48 +89,45 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   });
 
   const checkAuth = () => {
-    try {
-      const token = localStorage.getItem("ds_token") ?? sessionStorage.getItem("ds_token");
-      setIsAuthenticated(Boolean(token));
-    } catch (err) {
-      setIsAuthenticated(false);
-    }
+    setIsAuthenticated(hasValidSession());
   };
 
   const getDoctorId = () => {
-    try {
-      const userStr = localStorage.getItem("ds_user") ?? sessionStorage.getItem("ds_user");
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        return user.id;
-      }
-    } catch (err) {
-      console.error("Failed to get doctor ID:", err);
-    }
-    return null;
+    const user = getStoredUser();
+    return user?.id ?? null;
   };
 
   useEffect(() => {
     checkAuth();
 
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "ds_token" || e.key === "ds_user") {
+      if (e.key === "ds_token" || e.key === "ds_user" || e.key === "ds_refresh_token") {
         checkAuth();
       }
     };
     window.addEventListener("storage", onStorage);
 
+    const intervalId = window.setInterval(() => {
+      void ensureValidAccessToken().then((token) => {
+        setIsAuthenticated(Boolean(token));
+      });
+    }, 30_000);
+
     return () => {
       window.removeEventListener("storage", onStorage);
+      window.clearInterval(intervalId);
     };
   }, []);
 
   const handleStartRecording = async () => {
-    if (!isAuthenticated) {
+    const token = await ensureValidAccessToken();
+    if (!token) {
       onError?.("Please log in to start recording.");
       navigate("/login");
       return;
     }
+
+    setIsAuthenticated(true);
 
     try {
       await requestWakeLock();
@@ -335,11 +338,17 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     }
 
     try {
+      const token = await ensureValidAccessToken();
+      if (!token) {
+        onError?.("Please log in to save recording.");
+        return;
+      }
+
       const response = await fetch("/api/upload-audio/save-recording", {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem("ds_token") || sessionStorage.getItem("ds_token")}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           audioData: recordedAudio.base64,
@@ -384,11 +393,11 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
               size="small"
             />
             {isRecording && (
-              <Chip 
-                label="Recording..."
-                color="error"
+              <Chip
+                label={isPaused ? "Paused" : "Recording..."}
+                color={isPaused ? "warning" : "error"}
                 size="small"
-                className="animate-pulse"
+                className={isPaused ? undefined : "animate-pulse"}
               />
             )}
           </div>
@@ -514,23 +523,48 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
                   )}
                 </div>
               ) : (
-                <Button
-                  variant="contained"
-                  color="error"
-                  startIcon={<StopIcon />}
-                  onClick={() => handleStopRecording()}
-                  className="normal-case"
-                >
-                  Stop Recording
-                </Button>
+                <div className="flex gap-3 flex-wrap justify-center">
+                  {isPaused ? (
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      startIcon={<PlayArrowIcon />}
+                      onClick={() => resumeRecording()}
+                      className="normal-case"
+                    >
+                      Resume
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outlined"
+                      color="primary"
+                      startIcon={<PauseIcon />}
+                      onClick={() => pauseRecording()}
+                      className="normal-case"
+                    >
+                      Pause
+                    </Button>
+                  )}
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={<StopIcon />}
+                    onClick={() => handleStopRecording()}
+                    className="normal-case"
+                  >
+                    Stop Recording
+                  </Button>
+                </div>
               )}
             </>
           ) : null}
         </div>
 
         {isRecording && (
-          <p className="text-center text-sm text-red-600 mt-2 animate-pulse">
-            Recording in progress... Speak clearly into your microphone.
+          <p className={`text-center text-sm mt-2 ${isPaused ? "text-amber-700" : "text-red-600 animate-pulse"}`}>
+            {isPaused
+              ? "Recording paused. Resume when you are ready to continue."
+              : "Recording in progress... Speak clearly into your microphone."}
           </p>
         )}
 

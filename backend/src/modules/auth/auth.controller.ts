@@ -3,6 +3,8 @@ import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
 import { CreateReceptionistDto } from './dto/create-receptionist.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { LogoutDto } from './dto/logout.dto';
 import { AuthGuard } from '@nestjs/passport';
 
 @Controller('auth')
@@ -34,9 +36,16 @@ export class AuthController {
     }
   }
 
+  @Post('refresh')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refreshToken);
+  }
+
   @Post('logout')
-  async logout() {
-    return this.authService.logout();
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async logout(@Body() dto: LogoutDto) {
+    return this.authService.logout(dto.refreshToken);
   }
 
   @Post('receptionists')

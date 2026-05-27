@@ -15,8 +15,7 @@ services:
     build:
       context: ./frontend
       args:
-        - VITE_AWS_PRESIGN_S3_URL=${VITE_AWS_PRESIGN_S3_URL}
-        - VITE_API_GATEWAY_BASE_URL=${VITE_API_GATEWAY_BASE_URL}
+
         # Empty: frontend paths already include /api; nginx proxies /api/ to the backend
         - VITE_REACT_APP_API_BASE_URL=${VITE_REACT_APP_API_BASE_URL:-}
         - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-${SUPABASE_URL}}

@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { clearAuth, ensureValidAccessToken, refreshAccessToken } from './auth';
 
-const BASE = import.meta.env.VITE_REACT_APP_API_BASE_URL || ''; 
+const BASE = import.meta.env.VITE_REACT_APP_API_BASE_URL || '';
 
 export const api = axios.create({
   baseURL: BASE,
@@ -9,26 +10,58 @@ export const api = axios.create({
   },
 });
 
-// --- AUTHORIZATION INTERCEPTOR ---
-// Add ds_token to every request EXCEPT login/signup
+function isAuthRoute(url?: string): boolean {
+  return Boolean(
+    url?.includes('/api/auth/login') ||
+      url?.includes('/api/auth/signup') ||
+      url?.includes('/api/auth/refresh'),
+  );
+}
+
 api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("ds_token") ?? sessionStorage.getItem("ds_token");
-
-    // Define routes that should NOT include the token
-    const skipAuth =
-      config.url?.includes("/api/auth/login") ||
-      config.url?.includes("/api/auth/signup");
-
-    if (!skipAuth && token) {
-      config.headers["Authorization"] = `Bearer ${token}`;
-      // OR if your backend expects ds_token:
-      // config.headers["ds_token"] = token;
+  async (config) => {
+    if (!isAuthRoute(config.url)) {
+      const token = await ensureValidAccessToken();
+      if (token) {
+        config.headers['Authorization'] = `Bearer ${token}`;
+      }
     }
 
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => Promise.reject(error),
+);
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
+
+    if (
+      !originalRequest ||
+      originalRequest._retry ||
+      error.response?.status !== 401 ||
+      isAuthRoute(originalRequest.url)
+    ) {
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      originalRequest.headers = originalRequest.headers ?? {};
+      originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+      return api(originalRequest);
+    }
+
+    clearAuth();
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
+
+    return Promise.reject(error);
+  },
 );
 
 export default api;

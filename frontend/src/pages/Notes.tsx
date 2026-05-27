@@ -23,6 +23,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
 import ResponsiveAppBar from "../components/navbar";
+import { useRequireAuth } from "../hooks/use-require-auth";
 
 type ClinicalNote = {
   id: string;
@@ -52,6 +53,10 @@ const parseText = (v?: string) => {
 };
 
 export default function NotesPage() {
+  const { authorized } = useRequireAuth({
+    requiredRole: "doctor",
+    wrongRoleRedirect: "/receptionist/intake",
+  });
   const [notes, setNotes] = useState<ClinicalNote[]>([]);
   const [loading, setLoading] = useState(true);
   const noteRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -76,10 +81,12 @@ export default function NotesPage() {
   });
 
   useEffect(() => {
+    if (!authorized) return;
+
     api.get("/api/clinical-notes")
       .then((res) => setNotes(res.data))
       .finally(() => setLoading(false));
-  }, []);
+  }, [authorized]);
 
   // Handle URL hash for scrolling to specific note
   useEffect(() => {
@@ -283,6 +290,10 @@ export default function NotesPage() {
         return sortOrder === "latest" ? dateB - dateA : dateA - dateB;
       });
   }, [notes, search, selectedDate, sortOrder]);
+
+  if (!authorized) {
+    return null;
+  }
 
   if (loading) {
     return (

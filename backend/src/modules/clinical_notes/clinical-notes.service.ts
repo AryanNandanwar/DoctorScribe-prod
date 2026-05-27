@@ -256,6 +256,7 @@ export class ClinicalNotesService {
       name: patient.fullName ?? generated.name ?? '',
       gender: patient.gender ?? generated.gender ?? '',
       age: patient.age ?? generated.age ?? '',
+      weight: patient.weight ?? generated.weight ?? '',
       contact: patient.phone ?? generated.contact ?? '',
     };
   }

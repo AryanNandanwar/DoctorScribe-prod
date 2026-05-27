@@ -7,6 +7,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { doctorProviders } from '../doctor/doctor.providers';
 import { receptionistProviders } from '../receptionist/receptionist.providers';
+import { refreshTokenProviders } from './refresh-token.providers';
 import { DatabaseModule } from '../../db/database.module';
 
 @Module({
@@ -22,9 +23,11 @@ import { DatabaseModule } from '../../db/database.module';
           throw new Error('Missing JWT secret in environment');
         }
 
-        const raw = config.get<string>('JWT_EXPIRATION') ?? config.get<string>('JWT_EXPIRES_IN');
-        // Default to '3600s' if missing
-        const defaultVal = '3600s';
+        const raw =
+          config.get<string>('JWT_ACCESS_EXPIRATION') ??
+          config.get<string>('JWT_EXPIRATION') ??
+          config.get<string>('JWT_EXPIRES_IN');
+        const defaultVal = '1h';
 
         // If raw is a numeric string (e.g. "3600"), convert to number. Otherwise keep the string.
         let expiresInValue: string | number | undefined = defaultVal;
@@ -47,7 +50,7 @@ import { DatabaseModule } from '../../db/database.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [...doctorProviders, ...receptionistProviders, AuthService, JwtStrategy],
+  providers: [...doctorProviders, ...receptionistProviders, ...refreshTokenProviders, AuthService, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

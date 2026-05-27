@@ -28,6 +28,14 @@ class AudioProcessor extends AudioWorkletProcessor {
         }
         // Send complete recording for saving
         this.sendCompleteRecording();
+      } else if (event.data.type === 'pause') {
+        console.log(`⏸️ AudioProcessor: Pausing recording`);
+        this.isRecording = false;
+        this.bufferIndex = 0;
+      } else if (event.data.type === 'resume') {
+        console.log(`▶️ AudioProcessor: Resuming recording`);
+        this.isRecording = true;
+        this.bufferIndex = 0;
       } else if (event.data.type === 'save_recording') {
         console.log(`💾 AudioProcessor: Request to save recording`);
         this.sendCompleteRecording();

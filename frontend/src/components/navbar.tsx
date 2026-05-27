@@ -12,6 +12,7 @@ import Tooltip from '@mui/material/Tooltip';
 import MenuItem from '@mui/material/MenuItem';
 import AdbIcon from '@mui/icons-material/Adb';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { logoutSession } from '../lib/auth';
 
 const pages = [
   { label: "Patients", path: "/patients" },
@@ -53,7 +54,7 @@ function ResponsiveAppBar() {
     loadUser();
 
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'ds_user' || e.key === 'ds_token') {
+      if (e.key === 'ds_user' || e.key === 'ds_token' || e.key === 'ds_refresh_token') {
         loadUser();
       }
     };
@@ -89,22 +90,11 @@ function ResponsiveAppBar() {
     navigate('/');
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('ds_user');
-    localStorage.removeItem('ds_token');
-
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
-    sessionStorage.removeItem('accessToken');
-    sessionStorage.removeItem('ds_user');
-    sessionStorage.removeItem('ds_token');
-
+  const handleLogout = async () => {
+    handleCloseUserMenu();
+    await logoutSession();
     setUserName(null);
     setUserRole(null);
-    handleCloseUserMenu();
     navigate('/login', { replace: true });
   };
 
