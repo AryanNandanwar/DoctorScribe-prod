@@ -10,9 +10,9 @@ import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
 import Tooltip from '@mui/material/Tooltip';
 import MenuItem from '@mui/material/MenuItem';
-import AdbIcon from '@mui/icons-material/Adb';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { logoutSession } from '../lib/auth';
+import EchoAideLogo from './EchoAideLogo';
 
 const pages = [
   { label: "Patients", path: "/patients" },
@@ -107,18 +107,9 @@ function ResponsiveAppBar() {
           <Box
             className="hidden md:flex items-center cursor-pointer"
             onClick={handleLogoClick}
+            aria-label="EchoAide home"
           >
-            <AdbIcon sx={{ mr: 1 }} />
-            <Typography
-              variant="h6"
-              sx={{
-                fontFamily: 'monospace',
-                fontWeight: 700,
-                letterSpacing: '.3rem',
-              }}
-            >
-              LOGO
-            </Typography>
+            <EchoAideLogo height={40} className="rounded-md" />
           </Box>
 
           {/* Mobile Menu Icon */}
@@ -170,18 +161,9 @@ function ResponsiveAppBar() {
             sx={{ display: { xs: 'flex', md: 'none' }, flexGrow: 1 }}
             onClick={handleLogoClick}
             className="cursor-pointer justify-center items-center flex"
+            aria-label="EchoAide home"
           >
-            <AdbIcon sx={{ mr: 1 }} />
-            <Typography
-              variant="h6"
-              sx={{
-                fontFamily: 'monospace',
-                fontWeight: 700,
-                letterSpacing: '.2rem',
-              }}
-            >
-              LOGO
-            </Typography>
+            <EchoAideLogo height={32} className="rounded-md" />
           </Box>
 
           {/* Desktop Menu Centered */}

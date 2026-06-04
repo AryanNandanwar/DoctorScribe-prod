@@ -270,6 +270,31 @@ export class SonioxClientService {
     this.sessions.delete(sessionId);
   }
 
+  async cancelSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      this.logger.warn(`Session ${sessionId} not found for cancel`);
+      return;
+    }
+
+    this.logger.log(`Cancelling Soniox session: ${sessionId}`);
+    session.transcriptBuffer = [];
+    session.isActive = false;
+
+    try {
+      if (session.ws.readyState === WebSocket.OPEN) {
+        session.ws.close(1000, 'Session cancelled');
+      } else {
+        session.ws.terminate();
+      }
+    } catch (error) {
+      this.logger.error(`Failed to cancel session gracefully:`, error);
+      session.ws.terminate();
+    }
+
+    this.sessions.delete(sessionId);
+  }
+
   getFinalTranscript(sessionId: string): string[] {
     const session = this.sessions.get(sessionId);
     this.logger.debug(`Getting final transcript for session ${sessionId}. Session exists: ${!!session}`);

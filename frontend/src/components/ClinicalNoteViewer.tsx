@@ -27,6 +27,7 @@ import {
   parseStringContent,
 } from "../utils/clinical-note-record";
 import { printClinicalNotePdf } from "../utils/clinical-note-pdf.ts";
+import { getNoteGenerationErrorMessage } from "../utils/recording-status.ts";
 
 const patientDetailFields = [
   { key: 'name', label: 'Name' },
@@ -642,8 +643,18 @@ export default function ClinicalNoteViewer({
   if (error) {
     return (
       <Card className={className}>
-        <CardContent>
-          <Typography color="error">{error}</Typography>
+        <CardContent className="space-y-4">
+          <Typography color="error">{getNoteGenerationErrorMessage(error)}</Typography>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setError(null);
+              onNoteDiscarded?.();
+            }}
+            sx={{ textTransform: "none" }}
+          >
+            Back to home
+          </Button>
         </CardContent>
       </Card>
     );

@@ -27,7 +27,7 @@ function normalizePatientDetailKeys(details: Record<string, unknown>): Record<st
   return normalized;
 }
 
-const PATIENT_IDENTITY_KEYS = ["name", "age", "gender", "contact"] as const;
+const PATIENT_IDENTITY_KEYS = ["name", "age", "gender", "weight", "contact"] as const;
 
 function hasReceptionistPatientDetails(details: Record<string, string>): boolean {
   return PATIENT_IDENTITY_KEYS.some((key) => (details[key] ?? "").trim().length > 0);

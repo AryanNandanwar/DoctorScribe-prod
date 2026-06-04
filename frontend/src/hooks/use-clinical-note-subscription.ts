@@ -140,7 +140,7 @@ export function useClinicalNoteSubscription({
         timeoutRef.current = setTimeout(() => {
           console.log(`⏰ Timeout: Note ${noteId} not found after 15 seconds`);
           unsubscribe(); // Stop listening
-          onError?.(new Error(`Note ${noteId} not found`));
+          onError?.(new Error('NOTE_NOT_CREATED'));
         }, 15000);
       }
     }

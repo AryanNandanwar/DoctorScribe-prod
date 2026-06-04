@@ -5,12 +5,19 @@ describe('mergePatientDetails', () => {
     expect(
       mergePatientDetails(
         { name: 'Unknown' },
-        { name: 'Asha Rao', age: '41', gender: 'Female', contact: '9876543210' },
+        {
+          name: 'Asha Rao',
+          age: '41',
+          gender: 'Female',
+          weight: '68 kg',
+          contact: '9876543210',
+        },
       ),
     ).toEqual({
       name: 'Asha Rao',
       age: '41',
       gender: 'Female',
+      weight: '68 kg',
       contact: '9876543210',
     });
   });
@@ -31,6 +38,18 @@ describe('mergePatientDetails', () => {
       gender: 'male',
       age: '22',
       contact: '1234567899',
+    });
+  });
+
+  it('preserves weight from receptionist card details', () => {
+    expect(
+      mergePatientDetails(
+        { weight: '75 kg from conversation' },
+        { name: 'Asha Rao', weight: '68 kg' },
+      ),
+    ).toEqual({
+      name: 'Asha Rao',
+      weight: '68 kg',
     });
   });
 

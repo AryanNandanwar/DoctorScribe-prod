@@ -1,4 +1,4 @@
-const PATIENT_IDENTITY_KEYS = ['name', 'age', 'gender', 'contact'] as const;
+const PATIENT_IDENTITY_KEYS = ['name', 'age', 'gender', 'weight', 'contact'] as const;
 
 function normalizePatientDetailKeys(
   details: Record<string, string>,

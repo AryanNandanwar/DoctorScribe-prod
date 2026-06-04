@@ -8,6 +8,43 @@ import {
   mergePatientDetails,
   parsePatientDetails,
 } from "./clinical-note-record.ts";
+import {
+  getNoteGenerationErrorMessage,
+  noteSkipReasonToMessage,
+  parseRecordingStatusMessage,
+} from "./recording-status.ts";
+
+test("parseRecordingStatusMessage reads note_skipped websocket payloads", () => {
+  const parsed = parseRecordingStatusMessage({
+    type: "recording_status",
+    data: {
+      data: {
+        status: "note_skipped",
+        sessionId: "session-1",
+        noteId: "note-1",
+        reason: "empty_transcript",
+      },
+    },
+  });
+
+  assert.deepEqual(parsed, {
+    status: "note_skipped",
+    sessionId: "session-1",
+    noteId: "note-1",
+    reason: "empty_transcript",
+  });
+});
+
+test("note skip reasons map to doctor-friendly messages", () => {
+  assert.equal(
+    noteSkipReasonToMessage("empty_transcript"),
+    "No speech was detected. Please record again.",
+  );
+  assert.equal(
+    getNoteGenerationErrorMessage("NOTE_NOT_CREATED"),
+    "No speech was detected. Please record again.",
+  );
+});
 
 test("fetchExistingClinicalNote polls by noteId and returns an existing database row", async () => {
   const calls: string[] = [];
@@ -78,13 +115,20 @@ test("parsePatientDetails reads JSON stored in patient_details column", () => {
 test("mergePatientDetails prefers patient card values when provided", () => {
   const merged = mergePatientDetails(
     { name: "Unknown" },
-    { name: "Asha Rao", age: "41", gender: "Female", contact: "9876543210" },
+    {
+      name: "Asha Rao",
+      age: "41",
+      gender: "Female",
+      weight: "68 kg",
+      contact: "9876543210",
+    },
   );
 
   assert.deepEqual(merged, {
     name: "Asha Rao",
     age: "41",
     gender: "Female",
+    weight: "68 kg",
     contact: "9876543210",
   });
 });

@@ -6,7 +6,10 @@ import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import UploadIcon from "@mui/icons-material/Upload";
 import DownloadIcon from "@mui/icons-material/Download";
-import { useStreamingTranscription } from "../hooks/use-streaming-transcription";
+import {
+  useStreamingTranscription,
+  type NoteGenerationSkippedPayload,
+} from "../hooks/use-streaming-transcription";
 import { getWebSocketUrl } from "../lib/websocket-url";
 import { ensureValidAccessToken, getStoredUser, hasValidSession } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
@@ -28,6 +31,8 @@ interface AudioRecorderProps {
   onSessionStart?: (sessionId: string) => void;
   onSessionEnd?: () => void;
   onNoteIdGenerated?: (noteId: string) => void; // New callback for noteId
+  onNoteGenerationSkipped?: (payload: NoteGenerationSkippedPayload) => void;
+  onNoteGenerationFailed?: (payload: NoteGenerationSkippedPayload) => void;
   websocketUrl?: string;
   patientId?: string;
   intakeId?: string;
@@ -43,6 +48,8 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   onSessionStart,
   onSessionEnd,
   onNoteIdGenerated,
+  onNoteGenerationSkipped,
+  onNoteGenerationFailed,
   websocketUrl,
   patientId,
   intakeId,
@@ -71,6 +78,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     pauseRecording,
     resumeRecording,
     stopRecording,
+    cancelRecording,
     clearError,
     sendAudioChunk
   } = useStreamingTranscription({
@@ -85,7 +93,9 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     onSessionEnd: () => {
       console.log("Component: Session ended");
       onSessionEnd?.();
-    }
+    },
+    onNoteGenerationSkipped,
+    onNoteGenerationFailed,
   });
 
   const checkAuth = () => {
@@ -148,6 +158,17 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     autoStartAttemptedRef.current = true;
     void handleStartRecording();
   }, [autoStart, isAuthenticated, isConnected, isConnecting, isRecording, isGeneratingNote]);
+
+  const handleCancelRecording = async () => {
+    try {
+      await cancelRecording();
+      releaseWakeLock();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to cancel recording";
+      onError?.(msg);
+      releaseWakeLock();
+    }
+  };
 
   const handleStopRecording = async () => {
     try {
@@ -553,6 +574,14 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
                     className="normal-case"
                   >
                     Stop Recording
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="inherit"
+                    onClick={() => void handleCancelRecording()}
+                    className="normal-case"
+                  >
+                    Cancel
                   </Button>
                 </div>
               )}

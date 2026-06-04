@@ -1,0 +1,21 @@
+import {
+  getNoteSkipReasonForTranscript,
+  isTranscriptTooShortForNote,
+} from './streaming.service';
+
+describe('streaming transcript validation', () => {
+  it('treats empty transcripts as too short for note generation', () => {
+    expect(isTranscriptTooShortForNote('')).toBe(true);
+    expect(isTranscriptTooShortForNote('   ')).toBe(true);
+    expect(getNoteSkipReasonForTranscript('')).toBe('empty_transcript');
+  });
+
+  it('treats very short transcripts as too short for note generation', () => {
+    expect(isTranscriptTooShortForNote('hi')).toBe(true);
+    expect(getNoteSkipReasonForTranscript('hi')).toBe('transcript_too_short');
+  });
+
+  it('allows meaningful transcripts through', () => {
+    expect(isTranscriptTooShortForNote('patient has fever and cough')).toBe(false);
+  });
+});

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SocketIOService } from '../services/websocket-service';
+import { parseRecordingStatusMessage } from '../utils/recording-status';
 
 export interface StreamingState {
   isRecording: boolean;
@@ -10,11 +11,18 @@ export interface StreamingState {
   sessionId: string;
 }
 
+export interface NoteGenerationSkippedPayload {
+  noteId?: string;
+  reason: string;
+}
+
 export interface UseStreamingTranscriptionOptions {
   websocketUrl: string;
   onError?: (error: string) => void;
   onSessionStart?: (sessionId: string) => void;
   onSessionEnd?: () => void;
+  onNoteGenerationSkipped?: (payload: NoteGenerationSkippedPayload) => void;
+  onNoteGenerationFailed?: (payload: NoteGenerationSkippedPayload) => void;
 }
 
 export interface StopRecordingOptions {
@@ -27,7 +35,9 @@ export const useStreamingTranscription = ({
   websocketUrl,
   onError,
   onSessionStart,
-  onSessionEnd
+  onSessionEnd,
+  onNoteGenerationSkipped,
+  onNoteGenerationFailed,
 }: UseStreamingTranscriptionOptions) => {
   const [state, setState] = useState<StreamingState>({
     isRecording: false,
@@ -44,6 +54,13 @@ export const useStreamingTranscription = ({
   const streamRef = useRef<MediaStream | null>(null);
   const sessionIdRef = useRef<string | null>('');
   const isPausedRef = useRef(false);
+  const onNoteGenerationSkippedRef = useRef(onNoteGenerationSkipped);
+  const onNoteGenerationFailedRef = useRef(onNoteGenerationFailed);
+
+  useEffect(() => {
+    onNoteGenerationSkippedRef.current = onNoteGenerationSkipped;
+    onNoteGenerationFailedRef.current = onNoteGenerationFailed;
+  }, [onNoteGenerationSkipped, onNoteGenerationFailed]);
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -60,8 +77,21 @@ export const useStreamingTranscription = ({
     });
 
     ws.onMessage((message: any) => {
-      console.log("📨 WebSocket message received (ignored):", message.type);
-      // Streaming hook only handles audio sending, not responses
+      const statusPayload = parseRecordingStatusMessage(message);
+      if (!statusPayload?.status) {
+        return;
+      }
+
+      const payload = {
+        noteId: statusPayload.noteId,
+        reason: statusPayload.reason ?? 'unknown',
+      };
+
+      if (statusPayload.status === 'note_skipped') {
+        onNoteGenerationSkippedRef.current?.(payload);
+      } else if (statusPayload.status === 'note_failed') {
+        onNoteGenerationFailedRef.current?.(payload);
+      }
     });
 
     // Auto-connect
@@ -190,6 +220,25 @@ export const useStreamingTranscription = ({
     }
   }, []);
 
+  const cleanupAudioResources = useCallback(() => {
+    if (workletNodeRef.current) {
+      workletNodeRef.current.port.postMessage({ type: 'stop' });
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+
+    workletNodeRef.current = null;
+    isPausedRef.current = false;
+  }, []);
+
   const stopRecording = useCallback((noteId?: string, doctorId?: string, options: StopRecordingOptions = {}) => {
     console.log("🛑 Stopping recording...");
     console.log("📨 WebSocket status before stop:", wsRef.current?.isConnected());
@@ -231,23 +280,8 @@ export const useStreamingTranscription = ({
 
     // Note: Final note handling is now done by Supabase subscription
 
-    // Clean up audio resources
-    console.log(" Cleaning up audio resources...");
-    if (streamRef.current) {
-      console.log(" Stopping microphone tracks...");
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-
-    if (audioContextRef.current) {
-      console.log("🔧 Closing audio context...");
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-
-    workletNodeRef.current = null;
+    cleanupAudioResources();
     sessionIdRef.current = null;
-    isPausedRef.current = false;
 
     setState(prev => ({
       ...prev,
@@ -256,7 +290,7 @@ export const useStreamingTranscription = ({
     }));
     
     console.log("✅ Recording stopped and cleanup completed");
-  }, []);
+  }, [cleanupAudioResources, onSessionEnd]);
 
   const pauseRecording = useCallback(() => {
     if (!sessionIdRef.current) return;
@@ -298,6 +332,40 @@ export const useStreamingTranscription = ({
     });
   }, []);
 
+  const cancelRecording = useCallback(async () => {
+    console.log("🚫 Cancelling recording...");
+
+    const sessionId = sessionIdRef.current;
+    cleanupAudioResources();
+
+    if (wsRef.current && sessionId) {
+      wsRef.current.cancelRecording(sessionId);
+    }
+
+    sessionIdRef.current = null;
+    onSessionEnd?.();
+
+    wsRef.current?.disconnect();
+    try {
+      await wsRef.current?.connect();
+    } catch (error) {
+      console.error('Failed to reconnect WebSocket after cancel:', error);
+      const errorMessage = 'Failed to reconnect to streaming service';
+      setState((prev) => ({ ...prev, error: errorMessage }));
+      onError?.(errorMessage);
+    }
+
+    setState((prev) => ({
+      ...prev,
+      isRecording: false,
+      isPaused: false,
+      sessionId: '',
+      error: null,
+    }));
+
+    console.log("✅ Recording cancelled");
+  }, [cleanupAudioResources, onSessionEnd, onError]);
+
   const clearError = useCallback(() => {
     setState(prev => ({
       ...prev,
@@ -320,6 +388,7 @@ export const useStreamingTranscription = ({
     pauseRecording,
     resumeRecording,
     stopRecording,
+    cancelRecording,
     clearError,
     saveRecording,
     sendAudioChunk: (data: string, timestamp: number) => {

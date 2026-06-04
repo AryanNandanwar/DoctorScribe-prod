@@ -4,6 +4,25 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { SocketIOService } from "./websocket-service.ts";
 
+test("cancelRecording sends sessionId to backend", () => {
+  const service = new SocketIOService("http://localhost:3000");
+  const emitted: Array<{ event: string; data: unknown }> = [];
+
+  (service as unknown as { socket: { connected: boolean; emit: (event: string, data: unknown) => void } }).socket = {
+    connected: true,
+    emit: (event, data) => emitted.push({ event, data }),
+  };
+
+  service.cancelRecording("session-123");
+
+  assert.deepEqual(emitted, [
+    {
+      event: "cancel_recording",
+      data: { sessionId: "session-123" },
+    },
+  ]);
+});
+
 test("stopRecording sends sessionId, doctorId, and provided noteId to backend", () => {
   const service = new SocketIOService("http://localhost:3000");
   const emitted: Array<{ event: string; data: unknown }> = [];

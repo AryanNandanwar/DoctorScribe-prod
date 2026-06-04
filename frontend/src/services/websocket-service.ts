@@ -159,6 +159,11 @@ export class SocketIOService {
     this.sendMessage('start_recording', { sessionId });
   }
 
+  cancelRecording(sessionId: string) {
+    console.log("🚫 WebSocket: cancelRecording called with session:", sessionId);
+    this.sendMessage('cancel_recording', { sessionId });
+  }
+
   stopRecording(sessionId: string, doctorId: string, noteId?: string, options: StopRecordingOptions = {}) {
     // Debug: Log the raw parameters received
     console.log("🛑 WebSocket: stopRecording raw parameters:", { sessionId, doctorId, noteId });

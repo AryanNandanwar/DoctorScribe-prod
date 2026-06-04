@@ -22,6 +22,7 @@ import { ensureValidAccessToken, getStoredUser } from "../lib/auth.ts";
 import { useRequireAuth } from "../hooks/use-require-auth.ts";
 import { useStreamingTranscription } from "../hooks/use-streaming-transcription.ts";
 import { getWebSocketUrl } from "../lib/websocket-url.ts";
+import { noteSkipReasonToMessage } from "../utils/recording-status.ts";
 
 type IntakeCard = {
   id: string;
@@ -96,6 +97,29 @@ export default function HomePage() {
   const [intakeRecordingError, setIntakeRecordingError] = useState<string | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
+  const releaseWakeLock = () => {
+    if (wakeLockRef.current) {
+      void wakeLockRef.current.release();
+      wakeLockRef.current = null;
+    }
+  };
+
+  const resetIntakeRecording = useCallback(() => {
+    setActiveIntakeId(null);
+    setActivePatientId(null);
+    setActivePatientDetails(null);
+    setIntakeRecordingError(null);
+    releaseWakeLock();
+  }, []);
+
+  const handleNoteGenerationAborted = useCallback((reason: string) => {
+    if (!devPreviewNoteId) setCurrentNoteId(null);
+    setIsGeneratingNote(false);
+    setIsNoteReady(false);
+    resetIntakeRecording();
+    setIntakeRecordingError(noteSkipReasonToMessage(reason));
+  }, [devPreviewNoteId, resetIntakeRecording]);
+
   const {
     isRecording,
     isPaused,
@@ -106,12 +130,15 @@ export default function HomePage() {
     pauseRecording,
     resumeRecording,
     stopRecording,
+    cancelRecording,
     clearError,
   } = useStreamingTranscription({
     websocketUrl: getWebSocketUrl(),
     onError: (message) => setIntakeRecordingError(message),
     onSessionStart: (sessionId) => console.log("Intake session started:", sessionId),
     onSessionEnd: () => console.log("Intake session ended"),
+    onNoteGenerationSkipped: ({ reason }) => handleNoteGenerationAborted(reason),
+    onNoteGenerationFailed: ({ reason }) => handleNoteGenerationAborted(reason),
   });
 
   const fetchQueue = useCallback(async () => {
@@ -147,21 +174,6 @@ export default function HomePage() {
     } catch {
       // Wake lock not supported or failed
     }
-  };
-
-  const releaseWakeLock = () => {
-    if (wakeLockRef.current) {
-      void wakeLockRef.current.release();
-      wakeLockRef.current = null;
-    }
-  };
-
-  const resetIntakeRecording = () => {
-    setActiveIntakeId(null);
-    setActivePatientId(null);
-    setActivePatientDetails(null);
-    setIntakeRecordingError(null);
-    releaseWakeLock();
   };
 
   const handleNoteIdGenerated = (noteId: string) => {
@@ -224,6 +236,19 @@ export default function HomePage() {
       if (options?.resetIntakeOnFailure) {
         resetIntakeRecording();
       }
+    }
+  };
+
+  const handleCancelRecording = async () => {
+    try {
+      await cancelRecording();
+      if (!devPreviewNoteId) setCurrentNoteId(null);
+      setIsGeneratingNote(false);
+      setIsNoteReady(false);
+      resetIntakeRecording();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to cancel recording";
+      setIntakeRecordingError(msg);
     }
   };
 
@@ -303,6 +328,12 @@ export default function HomePage() {
               in real-time as you speak.
             </p>
           </div>
+
+          {intakeRecordingError && !viewerNoteId && (
+            <Alert severity="warning" className="mx-4 md:mx-8 max-w-3xl mb-4">
+              {intakeRecordingError}
+            </Alert>
+          )}
 
           {devPreviewNoteId && !currentNoteId && (
             <Alert severity="info" className="mx-4 md:mx-8 max-w-3xl mb-4">
@@ -447,14 +478,36 @@ export default function HomePage() {
                                       >
                                         Stop Recording
                                       </Button>
+                                      <Button
+                                        variant="outlined"
+                                        color="inherit"
+                                        size="small"
+                                        onClick={() => void handleCancelRecording()}
+                                        disabled={isGeneratingNote}
+                                        sx={{ textTransform: "none" }}
+                                      >
+                                        Cancel
+                                      </Button>
                                     </div>
                                   </>
                                 ) : (
-                                  <div className="flex items-center gap-2">
-                                    <CircularProgress size={18} />
-                                    <Typography variant="body2" color="text.secondary">
-                                      {isConnecting || !isConnected ? "Connecting…" : "Starting microphone…"}
-                                    </Typography>
+                                  <div className="flex flex-col gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <CircularProgress size={18} />
+                                      <Typography variant="body2" color="text.secondary">
+                                        {isConnecting || !isConnected ? "Connecting…" : "Starting microphone…"}
+                                      </Typography>
+                                    </div>
+                                    <Button
+                                      variant="outlined"
+                                      color="inherit"
+                                      size="small"
+                                      onClick={() => void handleCancelRecording()}
+                                      disabled={isGeneratingNote}
+                                      sx={{ textTransform: "none", alignSelf: "flex-start" }}
+                                    >
+                                      Cancel
+                                    </Button>
                                   </div>
                                 )}
                               </div>
@@ -502,6 +555,8 @@ export default function HomePage() {
           onSessionStart={handleSessionStart}
           onSessionEnd={handleSessionEnd}
           onNoteIdGenerated={handleNoteIdGenerated}
+          onNoteGenerationSkipped={({ reason }) => handleNoteGenerationAborted(reason)}
+          onNoteGenerationFailed={({ reason }) => handleNoteGenerationAborted(reason)}
         />
       )}
     </div>

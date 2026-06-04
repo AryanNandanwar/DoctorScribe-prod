@@ -17,6 +17,7 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import api from "../lib/api";
 import { saveAuthSession } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
+import EchoAideLogo from "../components/EchoAideLogo";
 
 // EchoAide Fullscreen Login Page (React + TypeScript + Tailwind + MUI)
 // Updated to call backend, show server errors & support "remember me".
@@ -106,19 +107,8 @@ export default function Login({ onSubmit }: Props) {
       {/* Left section - Login form */}
       <div className="flex flex-col justify-center items-center w-full md:w-1/3 lg:w-2/5 px-8 py-12 bg-white shadow-xl z-10">
         {/* Brand */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-lg flex items-center justify-center bg-gradient-to-br from-sky-600 to-emerald-500 text-white shadow-md">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2v6" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M9 9h6" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="17.5" cy="17.5" r="3" stroke="white" strokeWidth="1.6" />
-              <path d="M19.5 19.5L21 21" stroke="white" strokeWidth="1.6" strokeLinecap="round" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">EchoAide</h1>
-            <p className="text-sm text-slate-500">Secure medical notes & transcription</p>
-          </div>
+        <div className="mb-8">
+          <EchoAideLogo height={64} className="mx-auto" />
         </div>
 
         {/* Form */}

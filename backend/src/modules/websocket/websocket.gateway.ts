@@ -110,14 +110,47 @@ export class StreamingWebSocketGateway implements OnGatewayInit, OnGatewayConnec
         data.intakeId,
         data.patientDetails,
       );
-      this.logger.log(`Recording stopped successfully for session: ${data.sessionId}`);
-      this.logger.log(`Clinical note stored in backend...`);
-      
-      client.emit('recording_status', {
-        type: 'recording_status',
-        data: { status: 'stopped', sessionId: data.sessionId, noteId: data.noteId },
-        timestamp: Date.now(),
-      });
+
+      if (result.outcome === 'note_created') {
+        this.logger.log(`Recording stopped and clinical note stored for session: ${data.sessionId}`);
+        client.emit('recording_status', {
+          type: 'recording_status',
+          data: {
+            status: 'stopped',
+            sessionId: data.sessionId,
+            noteId: result.noteId,
+          },
+          timestamp: Date.now(),
+        });
+      } else if (result.outcome === 'note_skipped') {
+        this.logger.log(
+          `Recording stopped without note for session ${data.sessionId}: ${result.reason}`,
+        );
+        client.emit('recording_status', {
+          type: 'recording_status',
+          data: {
+            status: 'note_skipped',
+            sessionId: data.sessionId,
+            noteId: result.noteId,
+            reason: result.reason,
+          },
+          timestamp: Date.now(),
+        });
+      } else {
+        this.logger.error(
+          `Recording stopped but note generation failed for session ${data.sessionId}: ${result.reason}`,
+        );
+        client.emit('recording_status', {
+          type: 'recording_status',
+          data: {
+            status: 'note_failed',
+            sessionId: data.sessionId,
+            noteId: result.noteId,
+            reason: result.reason,
+          },
+          timestamp: Date.now(),
+        });
+      }
 
       return result;
     } catch (error) {
@@ -129,6 +162,34 @@ export class StreamingWebSocketGateway implements OnGatewayInit, OnGatewayConnec
         timestamp: Date.now(),
       });
       
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('cancel_recording')
+  async handleCancelRecording(
+    @MessageBody() data: { sessionId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      this.logger.log(`Cancelling recording session: ${data.sessionId} for client: ${client.id}`);
+
+      await this.streamingService.cancelRecording(client.id, data.sessionId);
+
+      client.emit('recording_status', {
+        type: 'recording_status',
+        data: { status: 'cancelled', sessionId: data.sessionId },
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      this.logger.error(`Failed to cancel recording: ${error.message}`);
+
+      client.emit('error', {
+        type: 'error',
+        data: { message: 'Failed to cancel recording: ' + error.message },
+        timestamp: Date.now(),
+      });
+
       throw error;
     }
   }
