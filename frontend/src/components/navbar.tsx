@@ -99,7 +99,12 @@ function ResponsiveAppBar() {
   };
 
   return (
-    <AppBar position="fixed" className="!fixed !top-0 !left-0 !right-0 !z-50">
+    <AppBar
+      position="fixed"
+      elevation={1}
+      className="!fixed !top-0 !left-0 !right-0 !z-50"
+      sx={{ bgcolor: "white", color: "text.primary" }}
+    >
       <div className="w-full px-4">
         <Toolbar disableGutters className="flex justify-between items-center">
 
@@ -109,7 +114,7 @@ function ResponsiveAppBar() {
             onClick={handleLogoClick}
             aria-label="EchoAide home"
           >
-            <EchoAideLogo height={40} className="rounded-md" />
+            <EchoAideLogo height={40} />
           </Box>
 
           {/* Mobile Menu Icon */}
@@ -121,6 +126,7 @@ function ResponsiveAppBar() {
               aria-haspopup="true"
               onClick={handleOpenNavMenu}
               color="inherit"
+              sx={{ color: 'text.primary' }}
             >
               <MenuIcon />
             </IconButton>
@@ -163,7 +169,7 @@ function ResponsiveAppBar() {
             className="cursor-pointer justify-center items-center flex"
             aria-label="EchoAide home"
           >
-            <EchoAideLogo height={32} className="rounded-md" />
+            <EchoAideLogo height={32} />
           </Box>
 
           {/* Desktop Menu Centered */}
@@ -179,7 +185,7 @@ function ResponsiveAppBar() {
               <Button
                 key={page.path}
                 onClick={() => navigate(page.path)}
-                sx={{ my: 2, color: 'white' }}
+                sx={{ my: 2, color: 'text.primary' }}
               >
                 {page.label}
               </Button>
@@ -212,7 +218,7 @@ function ResponsiveAppBar() {
                         {userName[0]?.toUpperCase()}
                       </Avatar>
                     }
-                    sx={{ textTransform: 'none', color: 'white' }}
+                    sx={{ textTransform: 'none', color: 'text.primary' }}
                   >
                     {userName}
                   </Button>

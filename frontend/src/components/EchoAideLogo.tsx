@@ -9,14 +9,14 @@ type EchoAideLogoProps = {
 export default function EchoAideLogo({
   height = 48,
   className = "",
-  alt = "EchoAide — The AI Operating System for Outpatient Clinics",
+  alt = "EchoAide — Secure medical notes & transcription",
 }: EchoAideLogoProps) {
   return (
     <img
       src={logoSrc}
       alt={alt}
-      className={`block w-auto max-w-full object-contain ${className}`}
-      style={{ height }}
+      className={`block w-auto max-w-full object-contain bg-transparent ${className}`}
+      style={{ height, background: "transparent" }}
       decoding="async"
     />
   );
