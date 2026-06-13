@@ -166,6 +166,52 @@ export class StreamingWebSocketGateway implements OnGatewayInit, OnGatewayConnec
     }
   }
 
+  @SubscribeMessage('pause_recording')
+  async handlePauseRecording(
+    @MessageBody() data: { sessionId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      await this.streamingService.pauseRecording(client.id, data.sessionId);
+      client.emit('recording_status', {
+        type: 'recording_status',
+        data: { status: 'paused', sessionId: data.sessionId },
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      this.logger.error(`Failed to pause recording: ${error.message}`);
+      client.emit('error', {
+        type: 'error',
+        data: { message: 'Failed to pause recording: ' + error.message },
+        timestamp: Date.now(),
+      });
+      throw error;
+    }
+  }
+
+  @SubscribeMessage('resume_recording')
+  async handleResumeRecording(
+    @MessageBody() data: { sessionId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      await this.streamingService.resumeRecording(client.id, data.sessionId);
+      client.emit('recording_status', {
+        type: 'recording_status',
+        data: { status: 'resumed', sessionId: data.sessionId },
+        timestamp: Date.now(),
+      });
+    } catch (error) {
+      this.logger.error(`Failed to resume recording: ${error.message}`);
+      client.emit('error', {
+        type: 'error',
+        data: { message: 'Failed to resume recording: ' + error.message },
+        timestamp: Date.now(),
+      });
+      throw error;
+    }
+  }
+
   @SubscribeMessage('cancel_recording')
   async handleCancelRecording(
     @MessageBody() data: { sessionId: string },

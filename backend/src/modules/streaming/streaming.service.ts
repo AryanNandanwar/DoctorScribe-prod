@@ -10,10 +10,15 @@ export interface StreamingSession {
   clientId: string;
   sessionId: string;
   isRecording: boolean;
+  isPaused: boolean;
   startTime: number;
+  lastAudioAt: number;
+  transcriptBuffer: string[];
+  keepaliveTimer?: ReturnType<typeof setInterval>;
 }
 
 const MIN_TRANSCRIPT_LENGTH = 10;
+const KEEPALIVE_INTERVAL_MS = 15_000;
 
 export type NoteSkipReason = 'empty_transcript' | 'transcript_too_short' | 'no_doctor_id';
 
@@ -51,26 +56,62 @@ export class StreamingService {
     this.logger.log(`Starting recording session ${sessionId} for client ${clientId}`);
 
     // Initialize session
+    const now = Date.now();
     const session: StreamingSession = {
       clientId,
       sessionId,
       isRecording: true,
-      startTime: Date.now(),
+      isPaused: false,
+      startTime: now,
+      lastAudioAt: now,
+      transcriptBuffer: [],
     };
 
     this.sessions.set(sessionId, session);
 
     // Start Soniox streaming connection
     try {
-      await this.sonioxClient.startSession(sessionId, () => {
-        // No-op - we don't handle transcript updates during streaming
+      await this.sonioxClient.startSession(sessionId, (transcript, isPartial) => {
+        this.appendFinalTranscript(sessionId, transcript, isPartial);
       });
+      this.startKeepaliveTimer(sessionId);
     } catch (error) {
       this.logger.error(`Failed to start Soniox session: ${error.message}`);
       this.sessions.delete(sessionId);
       
       throw error;
     }
+  }
+
+  async pauseRecording(clientId: string, sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.clientId !== clientId || !session.isRecording) {
+      return;
+    }
+
+    session.isPaused = true;
+    this.logger.log(`Recording paused for session ${sessionId}`);
+    await this.sonioxClient.sendKeepalive(sessionId);
+  }
+
+  async resumeRecording(clientId: string, sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.clientId !== clientId || !session.isRecording) {
+      return;
+    }
+
+    session.isPaused = false;
+    session.lastAudioAt = Date.now();
+    this.logger.log(`Recording resumed for session ${sessionId}`);
+
+    if (this.sonioxClient.needsSessionRestart(sessionId)) {
+      this.logger.warn(`Soniox session ${sessionId} inactive on resume, restarting`);
+      await this.sonioxClient.restartSessionIfNeeded(sessionId, (transcript, isPartial) => {
+        this.appendFinalTranscript(sessionId, transcript, isPartial);
+      });
+    }
+
+    await this.sonioxClient.sendKeepalive(sessionId);
   }
 
   async stopRecording(
@@ -90,6 +131,7 @@ export class StreamingService {
     }
 
     session.isRecording = false;
+    this.stopKeepaliveTimer(session);
 
     if (!doctorId) {
       this.logger.warn(`Doctor ID not provided, skipping note storage`);
@@ -100,8 +142,9 @@ export class StreamingService {
     // Get final transcript BEFORE stopping the Soniox session
     let finalTranscript = '';
     try {
-      const transcriptBuffer = this.sonioxClient.getFinalTranscript(sessionId);
-      finalTranscript = this.createCleanTranscript(transcriptBuffer);
+      const sonioxBuffer = this.sonioxClient.getFinalTranscript(sessionId);
+      const mergedBuffer = [...session.transcriptBuffer, ...sonioxBuffer];
+      finalTranscript = this.createCleanTranscript(mergedBuffer);
       this.logger.log(`Final transcript for note generation: ${finalTranscript.substring(0, 400)}...`);
     } catch (error) {
       this.logger.error(`Failed to get final transcript: ${error.message}`);
@@ -139,6 +182,11 @@ export class StreamingService {
   }
 
   private async endSessionWithoutNote(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      this.stopKeepaliveTimer(session);
+    }
+
     try {
       await this.sonioxClient.cancelSession(sessionId);
     } catch (error) {
@@ -172,8 +220,17 @@ export class StreamingService {
 
     console.log(`✅ Found session ${session.sessionId} for client ${clientId}, forwarding to Soniox`);
 
+    session.lastAudioAt = Date.now();
+
     // Forward audio chunk to Soniox
     try {
+      if (this.sonioxClient.needsSessionRestart(session.sessionId)) {
+        this.logger.warn(`Soniox session ${session.sessionId} disconnected, restarting before audio chunk`);
+        await this.sonioxClient.restartSessionIfNeeded(session.sessionId, (transcript, isPartial) => {
+          this.appendFinalTranscript(session.sessionId, transcript, isPartial);
+        });
+      }
+
       await this.sonioxClient.sendAudioChunk(session.sessionId, audioBuffer);
     } catch (error) {
       console.error(`❌ Failed to send audio chunk to Soniox: ${error.message}`);
@@ -182,6 +239,53 @@ export class StreamingService {
   }
 
   
+  private appendFinalTranscript(sessionId: string, transcript: string, isPartial: boolean): void {
+    if (isPartial) {
+      return;
+    }
+
+    const trimmed = transcript.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+
+    session.transcriptBuffer.push(trimmed);
+  }
+
+  private startKeepaliveTimer(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.keepaliveTimer) {
+      return;
+    }
+
+    session.keepaliveTimer = setInterval(() => {
+      const activeSession = this.sessions.get(sessionId);
+      if (!activeSession?.isRecording) {
+        this.stopKeepaliveTimer(activeSession);
+        return;
+      }
+
+      const idleMs = Date.now() - activeSession.lastAudioAt;
+      if (activeSession.isPaused || idleMs >= KEEPALIVE_INTERVAL_MS) {
+        void this.sonioxClient.sendKeepalive(sessionId);
+      }
+    }, KEEPALIVE_INTERVAL_MS);
+  }
+
+  private stopKeepaliveTimer(session?: StreamingSession): void {
+    if (!session?.keepaliveTimer) {
+      return;
+    }
+
+    clearInterval(session.keepaliveTimer);
+    session.keepaliveTimer = undefined;
+  }
+
   private createCleanTranscript(transcriptBuffer: string[]): string {
     if (!transcriptBuffer || transcriptBuffer.length === 0) {
       return '';
@@ -238,14 +342,14 @@ export class StreamingService {
 
     clientSessions.forEach(([sessionId, session]) => {
       this.logger.log(`Cleaning up session ${sessionId} for disconnected client ${clientId}`);
-      
+      this.stopKeepaliveTimer(session);
+
       if (session.isRecording) {
         this.sonioxClient.stopSession(sessionId).catch(error => {
           this.logger.error(`Failed to stop Soniox session on disconnect: ${error.message}`);
         });
       }
-      
-      
+
       this.sessions.delete(sessionId);
     });
   }
@@ -328,6 +432,7 @@ export class StreamingService {
     }
 
     session.isRecording = false;
+    this.stopKeepaliveTimer(session);
 
     // Stop Soniox streaming connection
     try {
@@ -352,6 +457,7 @@ export class StreamingService {
     }
 
     session.isRecording = false;
+    this.stopKeepaliveTimer(session);
 
     try {
       await this.sonioxClient.cancelSession(sessionId);

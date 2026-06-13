@@ -312,6 +312,51 @@ export class SonioxClientService {
     return session.transcriptBuffer;
   }
 
+  async restartSessionIfNeeded(
+    sessionId: string,
+    onTranscript: (transcript: string, isPartial: boolean) => void,
+  ): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session?.ws.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+
+    if (session?.isActive && session.ws.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    if (session) {
+      try {
+        if (session.ws.readyState === WebSocket.OPEN) {
+          session.ws.close();
+        }
+      } catch {
+        // Best-effort cleanup before restart
+      }
+      this.sessions.delete(sessionId);
+    }
+
+    await this.startSession(sessionId, onTranscript);
+  }
+
+  async sendKeepalive(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return;
+    }
+
+    if (!session.isActive || session.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      session.ws.send(JSON.stringify({ type: 'keepalive' }));
+      this.logger.debug(`Sent keepalive for session ${sessionId}`);
+    } catch (error) {
+      this.logger.warn(`Failed to send keepalive for session ${sessionId}: ${error.message}`);
+    }
+  }
+
   async sendAudioChunk(sessionId: string, audioArrayBuffer: ArrayBuffer): Promise<void> {
     console.log(`@ Sending audio chunk to Soniox for session ${sessionId}, size: ${audioArrayBuffer.byteLength}`);
     
@@ -557,5 +602,15 @@ export class SonioxClientService {
   isSessionActive(sessionId: string): boolean {
     const session = this.sessions.get(sessionId);
     return session?.isActive || false;
+  }
+
+  needsSessionRestart(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return true;
+    }
+
+    const state = session.ws.readyState;
+    return state === WebSocket.CLOSED || state === WebSocket.CLOSING;
   }
 }
