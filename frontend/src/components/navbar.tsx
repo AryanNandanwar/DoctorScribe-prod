@@ -16,7 +16,7 @@ import EchoAideLogo from './EchoAideLogo';
 
 const pages = [
   { label: "Patients", path: "/patients" },
-  { label: "Appointments", path: "/appointments" },
+  { label: "Pending Notes", path: "/pending-notes" },
   { label: "Notes", path: "/notes" },
 ];
 

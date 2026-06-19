@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 // import Register from "./pages/Register";
 import PatientsPage from "./pages/Patients";
 import NotesPage from "./pages/Notes";
+import PendingNotesPage from "./pages/PendingNotes";
 import ReceptionistIntakePage from "./pages/ReceptionistIntake";
 import DoctorLayout from "./layouts/DoctorLayout";
 
@@ -17,6 +18,7 @@ export default function App() {
         <Route element={<DoctorLayout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/patients" element={<PatientsPage />} />
+          <Route path="/pending-notes" element={<PendingNotesPage />} />
           <Route path="/notes" element={<NotesPage />} />
         </Route>
 

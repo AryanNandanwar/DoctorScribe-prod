@@ -16,7 +16,6 @@ import PauseIcon from "@mui/icons-material/Pause";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import AudioRecorder from "../components/transcribeBar.tsx";
 import ClinicalNoteViewer from "../components/ClinicalNoteViewer.tsx";
-import PendingDraftNotesSection from "../components/PendingDraftNotesSection.tsx";
 import api from "../lib/api.ts";
 import { ensureValidAccessToken, getStoredUser } from "../lib/auth.ts";
 import { useRequireAuth } from "../hooks/use-require-auth.ts";
@@ -90,7 +89,6 @@ export default function HomePage() {
     isGenerating: isGeneratingNote,
     isReady: isNoteReady,
     beginNote,
-    openDraftNote,
     markNoteReady,
     clearPendingNote,
     abortNoteGeneration,
@@ -98,7 +96,6 @@ export default function HomePage() {
   } = usePendingClinicalNote();
   const viewerNoteId = pendingNoteId ?? devPreviewNoteId;
   const [queue, setQueue] = useState<IntakeCard[]>([]);
-  const [draftNotesRefreshToken, setDraftNotesRefreshToken] = useState(0);
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [activeIntakeId, setActiveIntakeId] = useState<string | null>(null);
@@ -187,7 +184,6 @@ export default function HomePage() {
   useEffect(() => {
     return registerOnNoteSaved(() => {
       void fetchQueue();
-      setDraftNotesRefreshToken((current) => current + 1);
     });
   }, [registerOnNoteSaved, fetchQueue]);
 
@@ -358,13 +354,6 @@ export default function HomePage() {
           )}
 
           {!viewerNoteId && (
-            <>
-              <PendingDraftNotesSection
-                activeNoteId={pendingNoteId}
-                refreshToken={draftNotesRefreshToken}
-                onOpenNote={openDraftNote}
-              />
-
             <section className="px-4 md:px-8 max-w-5xl mx-auto mb-8 w-full">
               <div className="flex items-center justify-between gap-4 mb-3">
                 <Typography variant="h6" className="font-semibold text-slate-800">
@@ -552,7 +541,6 @@ export default function HomePage() {
                 </div>
               )}
             </section>
-            </>
           )}
 
         </div>
