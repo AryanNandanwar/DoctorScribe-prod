@@ -20,6 +20,14 @@ describe('streaming transcript validation', () => {
     expect(isTranscriptTooShortForNote('patient has fever and cough')).toBe(false);
   });
 
+  it('maps whitespace-only transcripts to empty_transcript', () => {
+    expect(getNoteSkipReasonForTranscript('   ')).toBe('empty_transcript');
+  });
+
+  it('maps short non-empty transcripts to transcript_too_short', () => {
+    expect(getNoteSkipReasonForTranscript('hello')).toBe('transcript_too_short');
+  });
+
   it('treats all-Not-mentioned AI notes as unusable', () => {
     expect(
       isNoteUnusable({

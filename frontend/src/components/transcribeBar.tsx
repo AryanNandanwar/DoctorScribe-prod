@@ -75,6 +75,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     isConnected,
     error,
     startRecording,
+    startStreamingSession,
     pauseRecording,
     resumeRecording,
     stopRecording,
@@ -270,14 +271,29 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       const uint8Array = new Uint8Array(arrayBuffer);
       const base64Audio = btoa(String.fromCharCode(...uint8Array));
 
-      // Start recording session using the hook's method
-      await startRecording();
+      const noteId = generateUUID();
+      const doctorId = getDoctorId();
+
+      if (!doctorId) {
+        onError?.("Doctor ID not found. Please log in again.");
+        return;
+      }
+
+      onNoteIdGenerated?.(noteId);
+
+      const sessionId = await startStreamingSession();
+      if (!sessionId) {
+        onError?.('Failed to start streaming session for uploaded audio.');
+        return;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Process the entire file in chunks to simulate real-time streaming
       await processAudioFileInChunks(base64Audio);
 
       // Stop recording to trigger final note generation
-      await stopRecording();
+      await stopRecording(noteId, doctorId, { patientId, intakeId });
 
       // Clean up
       setSelectedFile(null);

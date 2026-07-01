@@ -94,7 +94,7 @@ export class SonioxClientService {
 
     try {
       // Create WebSocket connection to Soniox
-      const wsUrl = 'wss://stt-rt.soniox.com/transcribe-websocket';
+      const wsUrl = process.env.SONIOX_WS_URL || 'wss://stt-rt.soniox.com/transcribe-websocket';
       
       console.log(`🔌 Connecting to ${wsUrl}...`);
       console.log(`@ Connection config:`, {

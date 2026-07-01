@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { SocketIOService } from '../services/websocket-service';
+import {
+  STREAMING_AUDIO_CONTEXT_OPTIONS,
+  STREAMING_MEDIA_TRACK_CONSTRAINTS,
+} from '../utils/audio-pcm';
 import { parseRecordingStatusMessage } from '../utils/recording-status';
 
 export interface StreamingState {
@@ -114,6 +118,27 @@ export const useStreamingTranscription = ({
   }, [websocketUrl]);
 
 
+  const startStreamingSession = useCallback(async (): Promise<string | null> => {
+    if (!wsRef.current?.isConnected()) {
+      setState(prev => ({ ...prev, error: 'Not connected to streaming service' }));
+      return null;
+    }
+
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    sessionIdRef.current = sessionId;
+    onSessionStart?.(sessionId);
+    wsRef.current.startRecording(sessionId);
+    isPausedRef.current = false;
+    setState(prev => ({
+      ...prev,
+      isRecording: true,
+      isPaused: false,
+      error: null,
+      sessionId,
+    }));
+    return sessionId;
+  }, [onSessionStart]);
+
   const startRecording = useCallback(async () => {
     console.log("🎤 Starting recording...");
     
@@ -137,22 +162,16 @@ export const useStreamingTranscription = ({
 
       // Initialize audio context
       console.log(" Initializing audio context...");
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 16000
-      });
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)(
+        STREAMING_AUDIO_CONTEXT_OPTIONS,
+      );
       console.log(" Audio context initialized");
       console.log("✅ Audio context initialized");
 
       // Get microphone access
       console.log("🎤 Requesting microphone access...");
       streamRef.current = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          sampleRate: 16000,
-          channelCount: 1
-        }
+        audio: STREAMING_MEDIA_TRACK_CONSTRAINTS,
       });
       console.log("✅ Microphone access granted");
 
@@ -391,6 +410,7 @@ export const useStreamingTranscription = ({
   return {
     ...state,
     startRecording,
+    startStreamingSession,
     pauseRecording,
     resumeRecording,
     stopRecording,

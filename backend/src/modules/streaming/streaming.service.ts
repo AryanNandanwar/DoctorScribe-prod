@@ -40,6 +40,40 @@ export function getNoteSkipReasonForTranscript(transcript: string): NoteSkipReas
   return 'transcript_too_short';
 }
 
+const NOT_MENTIONED = 'Not mentioned';
+
+function isMeaningfulNoteValue(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    return value.trim() !== '' && value !== NOT_MENTIONED;
+  }
+  if (Array.isArray(value)) {
+    return value.some(item => isMeaningfulNoteValue(item));
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.keys(record).some(key => isMeaningfulNoteValue(record[key]));
+  }
+  return false;
+}
+
+export function isNoteUnusable(note: Partial<ParsedNote>): boolean {
+  const sections: (keyof ParsedNote)[] = [
+    'patientDetails',
+    'medicalHistory',
+    'problemFaced',
+    'findings',
+    'diagnosis',
+    'investigationsAdvised',
+    'doctorInstructions',
+    'medicationPrescribed',
+  ];
+
+  return !sections.some(section => isMeaningfulNoteValue(note[section]));
+}
+
 @Injectable()
 export class StreamingService {
   private readonly logger = new Logger(StreamingService.name);

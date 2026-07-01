@@ -21,10 +21,10 @@ export class RefreshToken {
   @Column({ type: 'text' })
   role!: 'doctor' | 'receptionist';
 
-  @Column({ name: 'expires_at', type: 'timestamptz' })
+  @Column({ name: 'expires_at', type: 'datetime' })
   expiresAt!: Date;
 
-  @Column({ name: 'revoked_at', type: 'timestamptz', nullable: true })
+  @Column({ name: 'revoked_at', type: 'datetime', nullable: true })
   revokedAt!: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
